@@ -1,0 +1,57 @@
+{
+    "version": 10,
+    "$schema": "https://cmake.org/cmake/help/latest/_downloads/3e2d73bff478d88a7de0de736ba5e361/schema.json",
+    "cmakeMinimumRequired": {
+        "major": 4,
+        "minor": 0,
+        "patch": 1
+    },
+    "configurePresets": [
+        {
+            "name": "Base",
+            "hidden": true,
+            "description": "Base build",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "installDir": "${sourceDir}/build/install/${presetName}",
+            "cacheVariables": {
+                "PARAM_PROJECT_NAME": "noise",
+                "PARAM_PROJECT_SUMMARY": "Microkernel",
+                "PARAM_PROJECT_VERSION_MAJOR": "0",
+                "PARAM_PROJECT_VERSION_MINOR": "0",
+                "PARAM_PROJECT_VERSION_PATCH": "1",
+                "PARAM_BUILD_C_STANDARD_VERSION": "23",
+                "PARAM_BUILD_CXX_STANDARD_VERSION": "26",
+                "PARAM_PROJECT_LIMINE_API_REV": "4"
+            }
+        },
+        {
+            "name": "x64",
+            "hidden": true,
+            "description": "x86_64 Build config",
+            "cacheVariables": {
+                "PARAM_PROJECT_ARCHITECTURE": "x86_64"
+            }
+        },
+        {
+            "name": "Clang",
+            "hidden": true,
+            "generator": "Unix Makefiles",
+            "toolchainFile": "${sourceDir}/cmake/toolchains/x86_64-clang.cmake"
+        },
+        {
+            "name": "x86_64-clang",
+            "description": "Build x86_64 kernel using Clang",
+            "inherits": [
+                "Base",
+                "x64",
+                "Clang"
+            ]
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "x86_64-clang",
+            "configurePreset": "x86_64-clang"
+        }
+    ]
+}
