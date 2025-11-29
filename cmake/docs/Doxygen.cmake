@@ -23,7 +23,11 @@ function(project_enable_doxygen DOXYGEN_THEME)
     set(DOXYGEN_HTML_COLORSTYLE "LIGHT")
 
     if(NOT DOXYGEN_EXCLUDE_PATTERNS)
-        set(DOXYGEN_EXCLUDE_PATTERNS "${CMAKE_SOURCE_DIR}/deps/*")
+        set(
+            DOXYGEN_EXCLUDE_PATTERNS 
+            "${CMAKE_SOURCE_DIR}/deps/*"
+            "${CMAKE_BINARY_DIR}/_deps/*"    
+        )
     endif()
 
     if("${DOXYGEN_THEME}" STREQUAL "")
@@ -33,14 +37,10 @@ function(project_enable_doxygen DOXYGEN_THEME)
     if("${DOXYGEN_THEME}" STREQUAL "awesome" OR "${DOXYGEN_THEME}" STREQUAL "awesome-sidebar")
         include(FetchContent)
         FetchContent_Declare(
-            doxygen-awesome-css
+            _doxygen_theme
             URL https://github.com/jothepro/doxygen-awesome-css/archive/refs/heads/main.zip
         )
-        FetchContent_MakeAvailable(doxygen-awesome-css)
-
-        # Save the location the files were cloned into
-        # This allows us to get the path to doxygen-awesome.css
-        FetchContent_GetProperties(doxygen-awesome-css SOURCE_DIR AWESOME_CSS_DIR)
+        FetchContent_MakeAvailable(_doxygen_theme)
 
         if("${DOXYGEN_THEME}" STREQUAL "awesome" OR "${DOXYGEN_THEME}" STREQUAL "awesome-sidebar")
           set(DOXYGEN_HTML_EXTRA_STYLESHEET "${_doxygen_theme_SOURCE_DIR}/doxygen-awesome.css")

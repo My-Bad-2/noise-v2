@@ -6,9 +6,11 @@ set(${PROJECT_NAME}_VERSION_MAJOR   "${PARAM_PROJECT_VERSION_MAJOR}")
 set(${PROJECT_NAME}_VERSION_MINOR   "${PARAM_PROJECT_VERSION_MINOR}")
 set(${PROJECT_NAME}_VERSION_PATCH   "${PARAM_PROJECT_VERSION_PATCH}")
 set(${PROJECT_NAME}_VERSION         "${${PROJECT_NAME}_VERSION_MAJOR}.${${PROJECT_NAME}_VERSION_MINOR}.${${PROJECT_NAME}_VERSION_PATCH}")
-message(${${PROJECT_NAME}_VERSION})
 set(${PROJECT_NAME}_ARCHITECTURE    "${PARAM_PROJECT_ARCHITECTURE}")
 set(${PROJECT_NAME}_LIMINE_API_REV  "${PARAM_PROJECT_LIMINE_API_REV}")
+set(${PROJECT_NAME}_ISO_DIR         "${PARAM_PROJECT_ISO_DIR}")
+set(${PROJECT_NAME}_C_STD           "${PARAM_PROJECT_C_STANDARD_VERSION}")
+set(${PROJECT_NAME}_CXX_STD         "${PARAM_PROJECT_CXX_STANDARD_VERSION}")
 
 project(
     "${PARAM_PROJECT_NAME}"
@@ -17,20 +19,43 @@ project(
     LANGUAGES C CXX ASM
 )
 
+set(CMAKE_C_STANDARD ${${PROJECT_NAME}_C_STD})
+set(CMAKE_CXX_STANDARD ${${PROJECT_NAME}_CXX_STD})
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(cmake/compiler/Flags.cmake)
 include(cmake/misc/ProjectOptions.cmake)
+
 include(cmake/compiler/Cache.cmake)
 include(cmake/compiler/Linker.cmake)
+
 include(cmake/misc/PreventInSourceBuilds.cmake)
 include(cmake/misc/CheckAndApplyFlags.cmake)
 include(cmake/misc/AddSource.cmake)
 include(cmake/misc/Utils.cmake)
+include(cmake/misc/IsoBuilder.cmake)
+
 include(cmake/docs/Doxygen.cmake)
+
+include(cmake/deps/CPM.cmake)
+include(cmake/deps/Limine.cmake)
 
 project_enable_cache()
 project_configure_linker()
 project_assure_out_of_source_builds()
 
+add_subdirectory(klibc)
 add_subdirectory(kernel)
+add_subdirectory(misc/limine)
+
+project_enable_doxygen("awesome-sidebar")
+
+build_iso(
+    TRIGGER_NAME "iso"
+    STAGING_DIR ${${PROJECT_NAME}_ISO_DIR}
+    XORRISO_FLAGS ${ISO_FLAGS}
+)
+
+setup_limine(
+    TRIGGER_NAME "iso"
+)

@@ -5,6 +5,11 @@ set(
 )
 
 set(KERNEL_LINK_SCRIPT ${CMAKE_SOURCE_DIR}/misc/linker/${${PROJECT_NAME}_ARCHITECTURE}.ld)
+set(
+    KERNEL_INCLUDE_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/arch/${${PROJECT_NAME}_ARCHITECTURE}"
+)
 
 collect_sources_filtered(
     VAR KERNEL_SOURCES
@@ -14,10 +19,12 @@ collect_sources_filtered(
     DEBUG OFF
 )
 
-add_executable(
-    kernel
-    ${KERNEL_SOURCES}
-)
+add_executable(kernel ${KERNEL_SOURCES})
+
+set_target_properties(kernel PROPERTIES OUTPUT_NAME "${PROJECT_NAME}.elf")
+
+target_include_directories(kernel PRIVATE ${KERNEL_INCLUDE_DIR} PRIVATE ${KLIBC_INCLUDE_DIR})
+target_link_libraries(kernel klibc)
 
 target_apply_compile_settings(
     TARGET kernel
@@ -38,3 +45,5 @@ target_apply_linker_settings(
     SKIP_CHECK ON
     FLAGS ${${PROJECT_NAME}_LINK_FLAGS}
 )
+
+install(TARGETS kernel DESTINATION ${${PROJECT_NAME}_ISO_DIR}/boot/limine)
