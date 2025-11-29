@@ -59,13 +59,12 @@ set(
     "-ffreestanding"
     "-nostdinc"
 	"-nostdlib"
-	"-nostartfiles"
     "-fno-stack-protector"
     "-fstrict-vtable-pointers"
     "-funsigned-char"
     "-mgeneral-regs-only"
     "-mno-red-zone"
-	"-static"	
+	"-static"
 )
 
 set(
@@ -78,9 +77,9 @@ set(
 
 set(
     ${PROJECT_NAME}_LINK_FLAGS
+	"-ffreestanding"
     "-Wl,--gc-sections"
-	"-Wl,--nostdlib"
-    "-Wl,--static"
+    "-Wl,-static"
     "-Wl,-znoexecstack"
     "-Wl,-zmax-page-size=0x1000"
 )
