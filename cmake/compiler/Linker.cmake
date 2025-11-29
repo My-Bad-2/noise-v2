@@ -32,7 +32,7 @@ macro(project_configure_linker)
 
     list(
         APPEND
-        ${PROJECT_NAME}_LINKER_FLAGS
+        ${PROJECT_NAME}_LINK_FLAGS
         "-fuse-ld=${${PROJECT_NAME}_LINKER_OPTION}"
     )
 endmacro()

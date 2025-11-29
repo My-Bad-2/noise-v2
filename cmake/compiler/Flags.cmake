@@ -43,7 +43,6 @@ set(
 
 set(
     ${PROJECT_NAME}_CXX_WARNING_FLAGS
-    ${${PROJECT_NAME}_CX_WARNING_FLAGS}
     "-Wold-style-cast"
 	"-Wnon-virtual-dtor"
 	"-Wctor-dtor-privacy"
@@ -59,21 +58,31 @@ set(
     ${PROJECT_NAME}_CX_FLAGS
     "-ffreestanding"
     "-nostdinc"
+	"-nostdlib"
+	"-nostartfiles"
     "-fno-stack-protector"
     "-fstrict-vtable-pointers"
     "-funsigned-char"
     "-mgeneral-regs-only"
     "-mno-red-zone"
+	"-static"	
+)
+
+set(
+    ${PROJECT_NAME}_CXX_FLAGS
+    "-fno-rtti"
+    "-fno-exceptions"
+    "-fsized-deallocation"
+    "-fcheck-new"
 )
 
 set(
     ${PROJECT_NAME}_LINK_FLAGS
     "-Wl,--gc-sections"
-    "-Wl,-nostdlib"
-    "-Wl,-static"
-    "-Wl,-noexecstack"
-    "-Wl,-max-page-size,0x1000"
-	"-Wl,-T,${CMAKE_SOURCE_DIR}/misc/linker/${${PROJECT_NAME}_ARCHITECTURE}"
+	"-Wl,--nostdlib"
+    "-Wl,--static"
+    "-Wl,-znoexecstack"
+    "-Wl,-zmax-page-size=0x1000"
 )
 
 set(
@@ -114,14 +123,6 @@ else()
 	message(FATAL_ERROR "Unsupported ${PROJECT_NAME} Architecture: '${${PROJECT_NAME}_ARCHITECTURE}'")
 endif()
 
-if(CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
-	list(
-		APPEND
-		${PROJECT_NAME}_CX_FLAGS
-		"--target=${${PROJECT_NAME}_ARCHITECTURE}-elf"
-	)
-endif()
-
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
 	list(
 		APPEND
@@ -129,12 +130,3 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
 		"-Wl,--strip-debug"
 	)
 endif()
-
-set(
-    ${PROJECT_NAME}_CXX_FLAGS
-	${${PROJECT_NAME}_CX_FLAGS}
-    "-fno-rtti"
-    "-fno-exceptions"
-    "-fsized-deallocation"
-    "-fcheck-new"
-)

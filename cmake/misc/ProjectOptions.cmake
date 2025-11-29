@@ -27,10 +27,12 @@ if(NOT ${PROJECT_NAME}_ARCHITECTURE)
         CACHE STRING "Choose Kernel Architecture" FORCE
     )
 
+    set(${PROJECT_NAME}_ARCHITECTURES_LIST "x86_64")
+
     set_property(
         CACHE ${PROJECT_NAME}_ARCHITECTURE
         PROPERTY STRINGS
-        "x86_64"
+        ${PROJECT_NAME}_ARCHITECTURES_LIST
     )
 endif()
 

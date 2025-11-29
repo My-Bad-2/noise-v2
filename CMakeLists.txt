@@ -17,13 +17,20 @@ project(
     LANGUAGES C CXX ASM
 )
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 include(cmake/compiler/Flags.cmake)
 include(cmake/misc/ProjectOptions.cmake)
 include(cmake/compiler/Cache.cmake)
 include(cmake/compiler/Linker.cmake)
 include(cmake/misc/PreventInSourceBuilds.cmake)
 include(cmake/misc/CheckAndApplyFlags.cmake)
+include(cmake/misc/AddSource.cmake)
+include(cmake/misc/Utils.cmake)
+include(cmake/docs/Doxygen.cmake)
 
 project_enable_cache()
 project_configure_linker()
 project_assure_out_of_source_builds()
+
+add_subdirectory(kernel)
