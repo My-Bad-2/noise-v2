@@ -7,22 +7,42 @@ Before building and running this project, ensure you have the following tools in
 
 ### Build Tools
 - **CMAKE (Version 3.21 or newer)**
-- **Clang/LLVM**
 - **Make**
+
+### Compilers
+- **Clang/LLVM** (Required for `x86_64-clang*` presets. Ensure you have the `x86_64` target support enabled)
+- **GCC Cross-Compiler** (Required ONLY for `x86_64-gcc*` presets. System GCC usually targets the host OS, which is unsuitable for kernel development. You must build a specific cross-compiler)
+
 ### Packing Utilities
 - **Xorriso**
+
 ### Emulation (Optional, for testing)
 - **QEMU**
 
 ## Build Configuration
 This project uses CMake Presets to manage build configurations. The following presents are available:
 
+### Clang Presets (Recommended)
+Standard presets using the host Clang compiler.
 | Preset Name | Configuration Type |Description |
 | :--- | :--- | :--- |
 | `x86_64-clang` | RelWithDebInfo | The standard build configuration. Good for general testing |
 | `x86_64-clang-debug` | Debug | **Recommended for development.** Includes full debug symbols and disables optimizations. |
 | `x86_64-clang-minsize` | MinSizeRel | Optimizes heavily for the smallest possible binary size (`-Os`). |
 | `x86_64-clang-release` | Release | Optimizes heavily for speed (`-O3`) and strips debug symbols. Use this for performance benchmarks. |
+
+### GCC Presets
+Standard presets using a GCC Cross-Compiler.
+> **⚠️ Important Note:** To use these presets, you must compile and install a GCC cross-compiler for x86_64. The standard system GCC will not work.
+> 
+> Please follow the instructions here: [OSDev Wiki: GCC Cross-Compiler](https://osdev.wiki/wiki/GCC_Cross-Compiler)
+
+| Preset Name | Configuration Type |Description |
+| :--- | :--- | :--- |
+| `x86_64-gcc` | RelWithDebInfo | The standard build configuration. Good for general testing |
+| `x86_64-gcc-debug` | Debug | **Recommended for development.** Includes full debug symbols and disables optimizations. |
+| `x86_64-gcc-minsize` | MinSizeRel | Optimizes heavily for the smallest possible binary size (`-Os`). |
+| `x86_64-gcc-release` | Release | Optimizes heavily for speed (`-O3`) and strips debug symbols. Use this for performance benchmarks. |
 
 ## Building the Kernel
 Follow these steps to configure and build the bootable ISO.
@@ -36,10 +56,10 @@ Follow these steps to configure and build the bootable ISO.
 2. **Build and Package**
     After configuration, CMake creates a build directory specific to your chosen preset (e.g., `build/x86_64-clang`). You must navigate into this directory to run the build commands.
     1. **Enter the build directory:**
-    ```shell
-    # Replace `x86_64-clang` with the name of the present you used above
-    cd build/x86_64-clang
-    ```
+        ```shell
+        # Replace `x86_64-clang` with the name of the present you used above
+        cd build/x86_64-clang
+        ```
     2. **Compile the source code:** This compiles the kernel object files, links the final executable and copy it to ISO root directory.
         ```shell
         make
