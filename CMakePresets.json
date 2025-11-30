@@ -34,25 +34,100 @@
             }
         },
         {
+            "name": "Debug",
+            "hidden": true,
+            "description": "Enable Debug build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "Release",
+            "hidden": true,
+            "description": "Enable Release build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "MinSizeRelease",
+            "hidden": true,
+            "description": "Enable MinSIzeRel build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "MinSizeRel"
+            }
+        },
+        {
+            "name": "ReleaseWithDebug",
+            "hidden": true,
+            "description": "Enable RelWithDebInfo build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
+        },
+        {
             "name": "Clang",
             "hidden": true,
             "generator": "Unix Makefiles",
             "toolchainFile": "${sourceDir}/cmake/toolchains/x86_64-clang.cmake"
         },
         {
-            "name": "x86_64-clang",
-            "description": "Build x86_64 kernel using Clang",
+            "name": "x86_64-clang-default",
+            "description": "Build x86_64 kernel using Clang with RelWithDebInfo",
             "inherits": [
                 "Base",
                 "x64",
-                "Clang"
+                "Clang",
+                "ReleaseWithDebug"
+            ]
+        },
+        {
+            "name": "x86_64-clang-debug",
+            "description": "Build x86_64 kernel using Clang with Debug",
+            "inherits": [
+                "Base",
+                "x64",
+                "Clang",
+                "Debug"
+            ]
+        },
+        {
+            "name": "x86_64-clang-release",
+            "description": "Build x86_64 kernel using Clang with Release",
+            "inherits": [
+                "Base",
+                "x64",
+                "Clang",
+                "Release"
+            ]
+        },
+        {
+            "name": "x86_64-clang-minsize",
+            "description": "Build x86_64 kernel using Clang with MinSizeRel",
+            "inherits": [
+                "Base",
+                "x64",
+                "Clang",
+                "MinSizeRelease"
             ]
         }
     ],
     "buildPresets": [
         {
             "name": "x86_64-clang",
-            "configurePreset": "x86_64-clang"
+            "configurePreset": "x86_64-clang-default"
+        },
+        {
+            "name": "x86_64-clang-debug",
+            "configurePreset": "x86_64-clang-debug"
+        },
+        {
+            "name": "x86_64-clang-minsize",
+            "configurePreset": "x86_64-clang-minsize"
+        },
+        {
+            "name": "x86_64-clang-release",
+            "configurePreset": "x86_64-clang-release"
         }
     ]
 }

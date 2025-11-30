@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 4.0.1 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.21.0 FATAL_ERROR)
 
 set(PROJECT_NAME                    "${PARAM_PROJECT_NAME}")
 set(${PROJECT_NAME}_SUMMARY         "${PARAM_PROJECT_SUMMARY}")
@@ -11,6 +11,8 @@ set(${PROJECT_NAME}_LIMINE_API_REV  "${PARAM_PROJECT_LIMINE_API_REV}")
 set(${PROJECT_NAME}_ISO_DIR         "${PARAM_PROJECT_ISO_DIR}")
 set(${PROJECT_NAME}_C_STD           "${PARAM_PROJECT_C_STANDARD_VERSION}")
 set(${PROJECT_NAME}_CXX_STD         "${PARAM_PROJECT_CXX_STANDARD_VERSION}")
+set(${PROJECT_NAME}_QEMU_VNC        "${PARAM_PROJECT_QEMU_VNC}")
+set(${PROJECT_NAME}_ISO_FILE        "${CMAKE_BINARY_DIR}/${PROJECT_NAME}.iso")
 
 project(
     "${PARAM_PROJECT_NAME}"
@@ -24,11 +26,10 @@ set(CMAKE_CXX_STANDARD ${${PROJECT_NAME}_CXX_STD})
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(cmake/compiler/Flags.cmake)
-include(cmake/misc/ProjectOptions.cmake)
-
 include(cmake/compiler/Cache.cmake)
 include(cmake/compiler/Linker.cmake)
 
+include(cmake/misc/ProjectOptions.cmake)
 include(cmake/misc/PreventInSourceBuilds.cmake)
 include(cmake/misc/CheckAndApplyFlags.cmake)
 include(cmake/misc/AddSource.cmake)
@@ -36,9 +37,14 @@ include(cmake/misc/Utils.cmake)
 include(cmake/misc/IsoBuilder.cmake)
 
 include(cmake/docs/Doxygen.cmake)
+include(cmake/emulator/Qemu.cmake)
 
 include(cmake/deps/CPM.cmake)
 include(cmake/deps/Limine.cmake)
+include(cmake/deps/Ovmf.cmake)
+
+include(cmake/analyze/ClangTidy.cmake)
+include(cmake/format/ClangFormat.cmake)
 
 project_enable_cache()
 project_configure_linker()
@@ -53,9 +59,29 @@ project_enable_doxygen("awesome-sidebar")
 build_iso(
     TRIGGER_NAME "iso"
     STAGING_DIR ${${PROJECT_NAME}_ISO_DIR}
-    XORRISO_FLAGS ${ISO_FLAGS}
+    XORRISO_FLAGS ${XORRISO_FLAGS}
 )
 
-setup_limine(
-    TRIGGER_NAME "iso"
+setup_limine()
+add_qemu_targets(
+    ISO_FILE ${${PROJECT_NAME}_ISO_FILE}
+    COMMON_FLAGS ${QEMU_COMMON_FLAGS}
+    ACCEL_FLAGS ${QEMU_HARDWARE_ACCEL_FLAGS}
+    DEBUG_FLAGS ${QEMU_DEBUG_FLAGS}
+)
+
+set(
+    SOURCE_DIRECTORIES
+    "${CMAKE_SOURCE_DIR}/kernel"
+    "${CMAKE_SOURCE_DIR}/klibc"
+)
+
+add_clang_format_target(
+    TARGET_NAME "format"
+    DIRECTORIES ${SOURCE_DIRECTORIES}
+)
+
+add_clang_tidy_target(
+    TARGET_NAME "tidy"
+    DIRECTORIES ${SOURCE_DIRECTORIES}
 )

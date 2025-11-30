@@ -13,14 +13,12 @@ function(build_iso)
 
     add_custom_command(
         OUTPUT ${ISO_OUTPUT}
-        COMMAND ${XORRISO_CMD} 
-                -as mkisofs 
-                -o ${ISO_OUTPUT} 
+        COMMAND ${XORRISO_CMD}
                 ${ARG_XORRISO_FLAGS} 
                 ${ARG_STAGING_DIR}
+                -o ${ISO_OUTPUT}
         
-        # We assume the directory content is managed by an external target
-        # or implies a dependency on the staging folder timestamp
+        # The directory content is managed by an external target
         COMMENT "Packing ${ARG_STAGING_DIR} into ${ISO_OUTPUT}..."
         VERBATIM
     )

@@ -1,8 +1,4 @@
 function(setup_limine)
-    set(oneValueArgs TRIGGER_NAME)
-    
-    cmake_parse_arguments(ARG "" "${oneValueArgs}" ${ARGN})
-
     # --- 1. Set Basic Variables ---
     # Map standard arch names to Limine's EFI file naming convention
     if(${PROJECT_NAME}_ARCHITECTURE STREQUAL "x86_64")
@@ -12,7 +8,6 @@ function(setup_limine)
     endif()
 
     set(LIMINE_ISO_DIR ${${PROJECT_NAME}_ISO_DIR})
-    set(ISO_FILE "${CMAKE_BINARY_DIR}/${PROJECT_NAME}.iso")
 
     # --- 2. CPM Download ---
     include(${CPM_DOWNLOAD_LOCATION})
@@ -66,11 +61,11 @@ function(setup_limine)
 
     add_custom_target(
         patch_limine
-        DEPENDS ${ISO_FILE}
+        DEPENDS ${${PROJECT_NAME}_ISO_FILE}
         # The command: ./limine bios-install <iso_path>
-        COMMAND ${limine_artifacts_SOURCE_DIR}/limine bios-install ${ISO_FILE}
+        COMMAND ${limine_artifacts_SOURCE_DIR}/limine bios-install ${${PROJECT_NAME}_ISO_FILE}
         
-        COMMENT "Patching ${ISO_FILE} with Limine BIOS bootloader..."
+        COMMENT "Patching ${${PROJECT_NAME}_ISO_FILE} with Limine BIOS bootloader..."
         VERBATIM
     )
 endfunction()

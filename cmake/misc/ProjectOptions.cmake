@@ -81,3 +81,11 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
         message(SEND_ERROR "IPO is not supported: ${IPO_OUTPUT}")
     endif()
 endif()
+
+if(NOT ${PROJECT_NAME}_QEMU_VNC)
+    set(
+        ${PROJECT_NAME}_QEMU_VNC
+        OFF
+        CACHE STRING "Enable QEMU Virtual Network Computing to provite remote access"
+    )
+endif()

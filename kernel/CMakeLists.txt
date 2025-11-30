@@ -46,4 +46,13 @@ target_apply_linker_settings(
     FLAGS ${${PROJECT_NAME}_LINK_FLAGS}
 )
 
+add_custom_command(
+    TARGET kernel POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:kernel>
+            ${${PROJECT_NAME}_ISO_DIR}/boot/limine/
+    COMMENT "Copying Kernel to ISO directory"
+    VERBATIM
+)
+
 install(TARGETS kernel DESTINATION ${${PROJECT_NAME}_ISO_DIR}/boot/limine)

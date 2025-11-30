@@ -132,17 +132,53 @@ endif()
 
 set(
 	XORRISO_FLAGS
-	"-as mkisofs"
-	"-R -r"
-	"-J"
-	"-b boot/limine/limine-bios-cd.bin"
-	"-no-emul-boot"
-	"-boot-load-size 4"
-	"-boot-info-table"
-	"-hfsplus"
-	"-apm-block-size 2048"
-	"--efi-boot boot/limine/limine-uefi-cd.bin"
-	"-efi-boot-part"
-	"--efi-boot-image"
-	"--protective-msdos-label"
+	-as mkisofs
+	-R -r
+	-J
+	-b boot/limine/limine-bios-cd.bin
+	-no-emul-boot
+	-boot-load-size 4
+	-boot-info-table
+	-hfsplus
+	-apm-block-size 2048
+	--efi-boot boot/limine/limine-uefi-cd.bin
+	-efi-boot-part
+	--efi-boot-image
+	--protective-msdos-label
 )
+
+set(QEMU_LOGFILE "${CMAKE_BINARY_DIR}/qemu/logs.txt")
+
+set(
+	QEMU_COMMON_FLAGS
+	"-m" "512M"
+	"-no-reboot"
+	"-no-shutdown"
+	"-serial" "stdio"
+	"-rtc" "base=localtime"
+	"-boot" "order=d,menu=on,splash-time=0"
+)
+
+if(${PROJECT_NAME}_ARCHITECTURE STREQUAL "x86_64")
+	list(
+		APPEND
+		QEMU_COMMON_FLAGS
+		"-cpu" "max,migratable=off,+invtsc,+tsc-deadline"
+		"-M" "q35,smm=off"
+	)
+endif()
+
+if(${PROJECT_NAME}_QEMU_VNC)
+	list(APPEND QEMU_COMMON_FLAGS "-vnc 127.0.0.1:1")
+endif()
+
+set(
+	QEMU_DEBUG_FLAGS
+	"-d" "int" # Log CPU Interrupts
+	"-d" "guest_errors" # Log when OS accesses invalid hardware addresses
+	"-D" "${QEMU_LOGFILE}"
+	"-S" # Freeze CU at startup (wait for 'c' command in Debugger)
+	"-s" # Short for `-gdb tcp::1234`
+)
+
+set(QEMU_HARDWARE_ACCEL_FLAGS "-M" "accel=kvm:hvf:whpx:haxm:tcg")

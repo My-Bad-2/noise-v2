@@ -1,0 +1,26 @@
+CompileFlags:
+  # Specify the directory containing compile_commands.json.
+  CompilationDatabase: build/.*
+
+Diagnostics:
+  Suppress:
+    - "pp_file_not_found"
+    - "drv_unknown_argument"
+    - "unused-command-line-argument"
+  
+  ClangTidy:
+    Remove:
+      - "modernize-use-trailing-return-type" # Too noisy
+
+InlayHints:
+  Enabled: Yes
+  ParameterNames: Yes
+  DeducedTypes: Yes
+  Designators: Yes
+  BlockEnd: Yes
+
+Hover:
+  ShowAKA: Yes # Show the underlying type for typedefs
+
+Index:
+  Background: Build # Index the project in the background
