@@ -1,6 +1,6 @@
 CompileFlags:
   # Specify the directory containing compile_commands.json.
-  CompilationDatabase: build/.*
+  CompilationDatabase: build
 
 Diagnostics:
   Suppress:

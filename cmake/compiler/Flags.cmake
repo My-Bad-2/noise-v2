@@ -57,7 +57,7 @@ set(
 set(
     ${PROJECT_NAME}_CX_FLAGS
     "-ffreestanding"
-    "-nostdinc"
+    # "-nostdinc"
 	"-nostdlib"
     "-fno-stack-protector"
     "-fstrict-vtable-pointers"
@@ -87,6 +87,7 @@ set(
 set(
 	${PROJECT_NAME}_CX_DEFINES
 	"-DLIMINE_API_REVISION=${${PROJECT_NAME}_LIMINE_API_REV}"
+	"-DKSTACK_SIZE=0x4000"
 )
 
 if(CMAKE_BUILD_TYPE MATCHES "^(Debug|ReleaseDbg)$")

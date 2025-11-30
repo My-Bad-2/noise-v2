@@ -28,7 +28,7 @@ target_link_libraries(kernel klibc)
 
 target_apply_compile_settings(
     TARGET kernel
-    LANG "C;CXX"
+    LANG "C;CXX;ASM"
     FLAGS ${${PROJECT_NAME}_CX_FLAGS} ${KERNEL_CX_FLAGS} ${${PROJECT_NAME}_CX_DEFINES} ${${PROJECT_NAME}_CX_WARNING_FLAGS}
 )
 

@@ -10,10 +10,10 @@ This roadmap outlines the development stages for a 64-bit microkernel using the 
     - [X] Configure `make` or `cmake` build system.
 - [X] **Limine Integration**
     - [X] Configure `limine.cfg` (Limine protocol).
-- [ ] **Kernel Entry**
+- [X] **Kernel Entry**
     - [X] Write `linker.ld` (Kernel logical address layout).
-    - [ ] Implement `_start` in Assembly (Validate Limine handshake, setup stack).
-    - [ ] Implement `kmain()` entry point.
+    - [X] Implement `_start` in Assembly (Validate Limine handshake, setup stack).
+    - [X] Implement `kmain()` entry point.
 - [ ] **Basic Output**
     - [ ] Initialize UART (COM1 at `0x3F8`) for serial logging.
     - [ ] Implement `kprintf` utilizing UART. Use LLVM-libc for baremetal environment?

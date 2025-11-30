@@ -56,7 +56,7 @@ Checks: >
 WarningsAsErrors: 'bugprone-*,linuxkernel-*,clang-analyzer-*,performance-*'
 
 # Analyze headers within project, exclude external toolchain headers
-HeaderFilterRegex: '.*/src/.*|.*/include/.*'
+HeaderFilterRegex: '.*/(src|include)/.*'
 
 # Format style
 FormatStyle: file
