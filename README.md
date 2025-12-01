@@ -95,6 +95,7 @@ We gratefully acknowledge the developers of the following third-party libraries 
 | Library/Tool | Repository/Link |
 | :--- | :--- |
 | **Limine Bootloader** | https://codeberg.org/Limine/Limine | 
+| **LLVM C Library** | https://github.com/llvm/llvm-project |
 
 ## Licensing
 This project is Licensed under the **MIT License**. Please refer to the `LICENSE.md` file in the root directory for the full text.

@@ -16,6 +16,7 @@ set(${PROJECT_NAME}_ISO_DIR         "${PARAM_PROJECT_ISO_DIR}")
 set(${PROJECT_NAME}_C_STD           "${PARAM_PROJECT_C_STANDARD_VERSION}")
 set(${PROJECT_NAME}_CXX_STD         "${PARAM_PROJECT_CXX_STANDARD_VERSION}")
 set(${PROJECT_NAME}_QEMU_VNC        "${PARAM_PROJECT_QEMU_VNC}")
+set(${PROJECT_NAME}_USE_LLVM_LIBC   "${PARAM_PROJECT_USE_LLVM_LIBC}")
 set(${PROJECT_NAME}_ISO_FILE        "${CMAKE_BINARY_DIR}/${PROJECT_NAME}.iso")
 
 project(
@@ -46,6 +47,7 @@ include(cmake/emulator/Qemu.cmake)
 include(cmake/deps/CPM.cmake)
 include(cmake/deps/Limine.cmake)
 include(cmake/deps/Ovmf.cmake)
+include(cmake/deps/Klibc.cmake)
 
 include(cmake/analyze/ClangTidy.cmake)
 include(cmake/format/ClangFormat.cmake)
@@ -54,7 +56,11 @@ project_enable_cache()
 project_configure_linker()
 project_assure_out_of_source_builds()
 
-add_subdirectory(klibc)
+if(${PROJECT_NAME}_USE_LLVM_LIBC)
+    setup_prebuilt_klibc()
+endif()
+
+# add_subdirectory(klibc)
 add_subdirectory(kernel)
 add_subdirectory(misc/limine)
 

@@ -24,7 +24,7 @@ add_executable(kernel ${KERNEL_SOURCES})
 set_target_properties(kernel PROPERTIES OUTPUT_NAME "${PROJECT_NAME}.elf")
 
 target_include_directories(kernel PRIVATE ${KERNEL_INCLUDE_DIR} PRIVATE ${KLIBC_INCLUDE_DIR})
-target_link_libraries(kernel klibc)
+target_link_libraries(kernel llvm_libc)
 
 target_apply_compile_settings(
     TARGET kernel
