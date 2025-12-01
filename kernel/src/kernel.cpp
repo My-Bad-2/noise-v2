@@ -1,5 +1,5 @@
 #include "arch.hpp"
-
+#include <stdio.h>
 
 namespace kernel {
 namespace {
@@ -12,6 +12,10 @@ extern "C" void kmain() {
 
     kconsole = arch::get_kconsole();
     kconsole->init(115200);
-    kconsole->send_string("Hello, World!\n");
+    // kconsole->send_string("Hello, World!\n");
+
+    printf("%s", "Hello, World!\n");
+
+    while(true){}
 }
 }  // namespace kernel
