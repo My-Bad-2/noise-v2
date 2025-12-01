@@ -1,12 +1,17 @@
-#include <stdint.h>
-#include <string.h>
+#include "arch.hpp"
 
-extern "C" {
+
+namespace kernel {
 namespace {
-[[gnu::used]] uint8_t kstack[KSTACK_SIZE] = {};
+extern "C" [[gnu::used]] uint8_t kstack[KSTACK_SIZE] = {};
+hal::IUART* kconsole = nullptr;
+}
 
-void kmain() {
-    size_t len = strlen("Hello, World!");
+extern "C" void kmain() {
+    arch::init();
+
+    kconsole = arch::get_kconsole();
+    kconsole->init(115200);
+    kconsole->send_string("Hello, World!\n");
 }
-}
-}
+}  // namespace kernel

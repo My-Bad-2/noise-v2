@@ -48,6 +48,7 @@ include(cmake/deps/CPM.cmake)
 include(cmake/deps/Limine.cmake)
 include(cmake/deps/Ovmf.cmake)
 include(cmake/deps/Klibc.cmake)
+include(cmake/deps/FreestndCxxHdrs.cmake)
 
 include(cmake/analyze/ClangTidy.cmake)
 include(cmake/format/ClangFormat.cmake)
@@ -59,6 +60,8 @@ project_assure_out_of_source_builds()
 if(${PROJECT_NAME}_USE_LLVM_LIBC)
     setup_prebuilt_klibc()
 endif()
+
+message(STATUS "Freestnd hdrs at ${FREESTND_HDRS_DIR}")
 
 # add_subdirectory(klibc)
 add_subdirectory(kernel)

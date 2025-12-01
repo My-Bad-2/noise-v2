@@ -22,3 +22,5 @@ file(DOWNLOAD
 )
 
 include(${CPM_DOWNLOAD_LOCATION})
+
+set(CPM_SOURCE_CACHE "${CMAKE_SOURCE_DIR}/cache")

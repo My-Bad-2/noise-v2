@@ -15,7 +15,7 @@ This roadmap outlines the development stages for a 64-bit microkernel using the 
     - [X] Implement `_start` in Assembly (Validate Limine handshake, setup stack).
     - [X] Implement `kmain()` entry point.
 - [ ] **Basic Output**
-    - [ ] Initialize UART (COM1 at `0x3F8`) for serial logging.
+    - [X] Initialize UART (COM1 at `0x3F8`) for serial logging.
     - [ ] Implement `kprintf` utilizing UART. Use LLVM-libc for baremetal environment?
 
 ## Phase 2: CPU & Interrupts

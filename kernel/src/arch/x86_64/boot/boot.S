@@ -26,7 +26,7 @@ _start:
     // `kstack` is the address of the start of the array.
     // The stack grows DOWN, so RSP must start at the END of the array.
     leaq kstack(%rip), %rsp // Load address of array start
-    addq KSTACK_SIZE, %rsp // Move pointer to top of stack
+    addq $KSTACK_SIZE, %rsp // Move pointer to top of stack
 
     // SysV abi requires RSP to be 16-byte aligned before a call
     andq $-16, %rsp

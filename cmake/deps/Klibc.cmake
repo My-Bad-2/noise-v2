@@ -1,4 +1,6 @@
 function(setup_prebuilt_klibc)
+    include(${CPM_DOWNLOAD_LOCATION})
+    
     set(LIBC_ARCHITECTURE ${${PROJECT_NAME}_ARCHITECTURE})
 
     CPMAddPackage(

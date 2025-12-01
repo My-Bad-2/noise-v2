@@ -6,15 +6,10 @@ function(project_enable_doxygen DOXYGEN_THEME)
     endif()
 
 
-    is_verbose(_is_verbose)
-
-    if(NOT ${_is_verbose})
-        set(DOXYGEN_QUIET YES)
-    endif()
-
+    set(DOXYGEN_QUIET YES)
     set(DOXYGEN_CALLER_GRAPH YES)
     set(DOXYGEN_CALL_GRAPH YES)
-    set(DOXYGEN_EXTRACT_ALL YES)
+    set(DOXYGEN_EXTRACT_ALL NO)
     set(DOXYGEN_GENERATE_TREEVIEW YES)
 
     set(DOXYGEN_DOT_IMAGE_FORMAT svg)
@@ -25,8 +20,8 @@ function(project_enable_doxygen DOXYGEN_THEME)
     if(NOT DOXYGEN_EXCLUDE_PATTERNS)
         set(
             DOXYGEN_EXCLUDE_PATTERNS 
-            "${CMAKE_SOURCE_DIR}/deps/*"
-            "${CMAKE_BINARY_DIR}/_deps/*"    
+            "*/cache/*"
+            "*/limine.h"
         )
     endif()
 

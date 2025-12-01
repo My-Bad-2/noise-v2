@@ -44,7 +44,7 @@ set(
 set(
     ${PROJECT_NAME}_CXX_WARNING_FLAGS
     "-Wold-style-cast"
-	"-Wnon-virtual-dtor"
+	# "-Wnon-virtual-dtor"
 	"-Wctor-dtor-privacy"
 	"-Woverloaded-virtual"
 	"-Wnoexcept"

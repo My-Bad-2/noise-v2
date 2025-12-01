@@ -9,6 +9,7 @@ set(
     KERNEL_INCLUDE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/arch/${${PROJECT_NAME}_ARCHITECTURE}"
+    ${FREESTND_HDRS_DIR}
 )
 
 collect_sources_filtered(
@@ -23,8 +24,8 @@ add_executable(kernel ${KERNEL_SOURCES})
 
 set_target_properties(kernel PROPERTIES OUTPUT_NAME "${PROJECT_NAME}.elf")
 
-target_include_directories(kernel PRIVATE ${KERNEL_INCLUDE_DIR} PRIVATE ${KLIBC_INCLUDE_DIR})
-target_link_libraries(kernel llvm_libc)
+target_include_directories(kernel PRIVATE ${KERNEL_INCLUDE_DIR})
+target_link_libraries(kernel llvm-libc ${CRT_LIBRARY_PATH}/libclang_rt.builtins.a)
 
 target_apply_compile_settings(
     TARGET kernel
