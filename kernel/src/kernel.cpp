@@ -5,16 +5,16 @@
 namespace kernel {
 namespace {
 extern "C" [[gnu::used]] uint8_t kstack[KSTACK_SIZE] = {};
-hal::IUART* kconsole = nullptr;
-}
+hal::IUART* kconsole                                 = nullptr;
+}  // namespace
 
-extern "C" void kmain() {    
+extern "C" void kmain() {
     kconsole = arch::get_kconsole();
     kconsole->init(115200);
 
     arch::init();
     memory::init();
-    
+
     LOG_DEBUG("Hello, World!");
 
     arch::halt(true);

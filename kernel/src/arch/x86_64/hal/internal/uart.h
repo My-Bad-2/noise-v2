@@ -1,7 +1,3 @@
-#pragma once
-
-#include <stdint.h>
-
 /**
  * @file uart.h
  * @brief Internal register definitions for 16550-compatible UARTs.
@@ -14,6 +10,7 @@
  * constants together with the port I/O helpers in `hal/io.hpp` to
  * implement the `IUart` interface.
  */
+#pragma once
 
 // 16550-compatible UART register offsets (from base I/O port).
 #define DATA                     0  // RBR (read) / THR (write)

@@ -19,23 +19,24 @@
 //   LOG_ERROR("Failed to do thing: %s", reason);
 
 #define LOG_DEBUG(fmt, ...)                                                                     \
-    kernel::__details::Logger::log(kernel::__details::LogLevel::Debug, __FILE_NAME__, __LINE__, fmt, \
-                                   ##__VA_ARGS__)
-#define LOG_INFO(fmt, ...)                                                                      \
-    kernel::__details::Logger::log(kernel::__details::LogLevel::Info, __FILE_NAME__, __LINE__, fmt, \
-                                   ##__VA_ARGS__)
-#define LOG_WARN(fmt, ...)                                                                          \
-    kernel::__details::Logger::log(kernel::__details::LogLevel::Warning, __FILE_NAME__, __LINE__, fmt, \
-                                   ##__VA_ARGS__)
+    kernel::__details::Logger::log(kernel::__details::LogLevel::Debug, __FILE_NAME__, __LINE__, \
+                                   fmt, ##__VA_ARGS__)
+#define LOG_INFO(fmt, ...)                                                                     \
+    kernel::__details::Logger::log(kernel::__details::LogLevel::Info, __FILE_NAME__, __LINE__, \
+                                   fmt, ##__VA_ARGS__)
+#define LOG_WARN(fmt, ...)                                                                        \
+    kernel::__details::Logger::log(kernel::__details::LogLevel::Warning, __FILE_NAME__, __LINE__, \
+                                   fmt, ##__VA_ARGS__)
 #define LOG_ERROR(fmt, ...)                                                                     \
-    kernel::__details::Logger::log(kernel::__details::LogLevel::Error, __FILE_NAME__, __LINE__, fmt, \
-                                   ##__VA_ARGS__)
+    kernel::__details::Logger::log(kernel::__details::LogLevel::Error, __FILE_NAME__, __LINE__, \
+                                   fmt, ##__VA_ARGS__)
 #define LOG_FATAL(fmt, ...)                                                                     \
-    kernel::__details::Logger::log(kernel::__details::LogLevel::Fatal, __FILE_NAME__, __LINE__, fmt, \
-                                   ##__VA_ARGS__)
+    kernel::__details::Logger::log(kernel::__details::LogLevel::Fatal, __FILE_NAME__, __LINE__, \
+                                   fmt, ##__VA_ARGS__)
 
 // PANIC helper: prints a panic message and halts the CPU via Logger::panic().
-#define PANIC(fmt, ...) kernel::__details::Logger::panic(__FILE_NAME__, __LINE__, fmt, ##__VA_ARGS__)
+#define PANIC(fmt, ...) \
+    kernel::__details::Logger::panic(__FILE_NAME__, __LINE__, fmt, ##__VA_ARGS__)
 
 namespace kernel {
 namespace __details {

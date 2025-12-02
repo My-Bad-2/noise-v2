@@ -1,12 +1,9 @@
-#pragma once
-
 /**
  * @file memory.hpp
  * @brief Core memory utilities and higher-half direct-map helpers.
- *
- * Provides helpers to translate between physical and higher-half virtual
- * addresses using the HHDM offset provided by the bootloader.
  */
+
+#pragma once
 
 #include <cstdint>
 
@@ -14,7 +11,7 @@ namespace kernel::memory {
 namespace __details {
 /// Higher-half direct-map offset (set during memory::init()).
 extern uintptr_t hhdm_offset;
-}
+}  // namespace __details
 
 #ifndef __clang__
 #pragma GCC diagnostic push

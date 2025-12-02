@@ -1,5 +1,3 @@
-#pragma once
-
 /**
  * @file spinlock.hpp
  * @brief Simple ticket-based spinlock and RAII lock guard utilities.
@@ -13,6 +11,8 @@
  *
  * The implementation is header-only and uses `std::atomic` for safety.
  */
+
+#pragma once
 
 #include <atomic>
 #include "arch.hpp"
