@@ -64,7 +64,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     list(
         APPEND
-        ${PROJECT_NAME}CX_FLAGS
+        ${PROJECT_NAME}_CX_FLAGS
         "-fdiagnostics-color=always"
     )    
 else()
@@ -72,14 +72,11 @@ else()
 endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    include(CheckIPOSupported)
-    check_ipo_supported(RESULT IPO_SUPPORTED_RES OUTPUT IPO_OUTPUT)
-
-    if(IPO_SUPPORTED_RES)
-        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
-    else()
-        message(SEND_ERROR "IPO is not supported: ${IPO_OUTPUT}")
-    endif()
+    list(
+        APPEND
+        ${PROJECT_NAME}_CX_FLAGS
+        "-flto"
+    )
 endif()
 
 if(NOT ${PROJECT_NAME}_QEMU_VNC)

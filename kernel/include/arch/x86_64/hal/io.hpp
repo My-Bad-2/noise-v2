@@ -10,8 +10,12 @@
  * All functions are inline templates around inline assembly, and are
  * inherently architecture-specific and unsafe if misused.
  *
- * These utilities are not meant to be exposed as a stable public API;
- * they are internal building blocks for the x86_64 HAL.
+ * Architectural role:
+ *  - Forms the bottom layer of the x86_64 HAL for talking to classic
+ *    I/O-port-mapped devices.
+ *  - Used directly by drivers such as `kernel::hal::UART16550`.
+ *  - Higher layers (logging, memory, etc.) never call this directly;
+ *    they go through device abstractions (UART, timers, etc.).
  */
 
 #pragma once
@@ -87,6 +91,9 @@ inline void out(uint16_t port, T value) {
  * Performs a small delay by writing to an unused port (0x80). This is a
  * common technique on x86 to give slow devices time to settle after an
  * I/O operation, especially in early boot code.
+ *
+ * From an architectural perspective this is a low-level primitive used
+ * by some drivers to serialize sequences of port I/O operations.
  */
 inline void io_wait() {
     // Use port 0x80 (historically unused) for a tiny delay.

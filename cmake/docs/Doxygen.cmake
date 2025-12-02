@@ -20,8 +20,8 @@ function(project_enable_doxygen DOXYGEN_THEME)
     if(NOT DOXYGEN_EXCLUDE_PATTERNS)
         set(
             DOXYGEN_EXCLUDE_PATTERNS 
-            "*/limine.h"
             "*/_deps/*"
+            "*/boot/*.h"
         )
     endif()
 

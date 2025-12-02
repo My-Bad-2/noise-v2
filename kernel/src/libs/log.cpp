@@ -2,12 +2,21 @@
  * @file log.cpp
  * @brief Implementation of the kernel logging backend.
  *
- * This file provides the concrete implementation of
- * `kernel::__details::Logger`. It prints colorized log messages using
- * stdio-style functions and halts the system on panic.
+ * Provides the concrete implementation of `kernel::__details::Logger`.
+ * Messages are colorized using ANSI escape sequences and printed via
+ * stdio-style functions. `panic()` halts the system.
+ *
+ * Architectural role:
+ *  - This is the central logging sink used across subsystems (memory,
+ *    arch, drivers, etc.), typically via the `LOG_*` macros.
+ *  - Early in boot, it usually writes to a serial console provided by
+ *    `kernel::arch::get_kconsole()` or by a basic stdio backend.
+ *  - `panic()` is the common fatal error path and ultimately calls
+ *    `kernel::arch::halt(false)` to stop execution.
  */
 
 #include <stdio.h>
+#include <stdarg.h>
 #include "arch.hpp"
 #include "libs/log.hpp"
 
@@ -15,7 +24,8 @@ namespace kernel {
 namespace __details {
 namespace {
 
-// ANSI color escape sequences for different log levels.
+// ANSI color escape sequences for different log levels. These are used
+// to visually distinguish severities in a serial terminal.
 constexpr const char* COLOR_RESET   = "\033[0m";
 constexpr const char* COLOR_GREY    = "\033[90m";
 constexpr const char* COLOR_WHITE   = "\033[37m";
@@ -26,7 +36,7 @@ constexpr const char* COLOR_MAGENTA = "\033[35m";
 }  // namespace
 
 const char* Logger::level_to_string(LogLevel level) {
-    // Map log level to a short tag.
+    // Map log level to a short tag used in the log prefix.
     switch (level) {
         case LogLevel::Debug:
             return "DBG";
@@ -65,7 +75,7 @@ void Logger::log(LogLevel level, const char* file, int line, const char* format,
     const char* color     = level_to_color(level);
     const char* level_str = level_to_string(level);
 
-    // Prefix: [LEVEL] (file:line)
+    // Prefix: [LEVEL] (file:line) before the user message.
     printf("%s[%s] (%s:%d) ", color, level_str, file, line);
 
     // Forward the variable arguments to vprintf.
@@ -79,8 +89,8 @@ void Logger::log(LogLevel level, const char* file, int line, const char* format,
 }
 
 void Logger::panic(const char* file, int line, const char* format, ...) {
-    // Print a panic prefix and message in magenta.
-    printf("%s[PANIC] (%s:%d)", COLOR_MAGENTA, file, line);
+    // Print a panic prefix and message in magenta. PANIC macro calls here.
+    printf("%s[PANIC] (%s:%d) ", COLOR_MAGENTA, file, line);
 
     va_list args;
     va_start(args, format);
@@ -89,7 +99,8 @@ void Logger::panic(const char* file, int line, const char* format, ...) {
 
     printf("%s\n", COLOR_RESET);
 
-    // Halt the system with interrupts disabled.
+    // Final fatal path: halt the system with interrupts disabled.
+    // All unrecoverable errors (e.g. bad memory map) funnel into this.
     arch::halt(false);
 }
 

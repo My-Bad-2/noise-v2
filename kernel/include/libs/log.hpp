@@ -35,7 +35,7 @@
                                    ##__VA_ARGS__)
 
 // PANIC helper: prints a panic message and halts the CPU via Logger::panic().
-#define PANIC(fmt, ...) kernel::__details::log(__FILE_NAME__, __LINE__, fmt, ##__VA_ARGS__)
+#define PANIC(fmt, ...) kernel::__details::Logger::panic(__FILE_NAME__, __LINE__, fmt, ##__VA_ARGS__)
 
 namespace kernel {
 namespace __details {

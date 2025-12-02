@@ -2,9 +2,16 @@
  * @file uart.cpp
  * @brief x86_64 16550 UART implementation of the HAL UART interface.
  *
- * This file contains the low-level implementation of `hal::UART16550`
+ * This file contains the low-level implementation of `kernel::hal::UART16550`
  * using legacy I/O ports. All operations are blocking and suitable for
- * use in early boot.
+ * use in early boot and debugging.
+ *
+ * Architectural role:
+ *  - Implements a concrete UART driver used as the kernel console.
+ *  - `kernel::arch::get_kconsole()` typically instantiates this type
+ *    and exposes it via the abstract `IUART` HAL interface.
+ *  - The logging subsystem and any debug/console code send characters
+ *    through this UART driver (directly or indirectly).
  */
 
 #include "hal/uart.hpp"
@@ -36,7 +43,7 @@ bool UART16550::is_data_ready() {
 void UART16550::send_char(char c) {
     // Busy-wait until the transmitter can accept a new byte.
     while (!this->is_tx_ready()) {
-        // Spin wait;
+        // Spin wait; upper layers should avoid excessive bursts here.
     }
     this->write(DATA, static_cast<uint8_t>(c));
 }

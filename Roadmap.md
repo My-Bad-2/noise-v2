@@ -21,9 +21,9 @@ This roadmap outlines the development stages for a 64-bit microkernel using the 
 ## Phase 2: Memory Management
 *Goal: Manage physical RAM and establish Virtual Memory for isolation.*
 
-- [ ] **Physical Memory Manager (PMM)**
-    - [ ] Parse Limine Memory Map (`limine_memmap_request`).
-    - [ ] Implement Bitmap or Buddy Allocator for 4KiB page tracking.
+- [X] **Physical Memory Manager (PMM)**
+    - [X] Parse Limine Memory Map (`limine_memmap_request`).
+    - [X] Implement Bitmap with Hot Cache stack for 4KiB page tracking.
 - [ ] **Virtual Memory Manager (VMM)**
     - [ ] Retrieve HHDM (Higher Half Direct Map) offset from Limine.
     - [ ] Implement x86_64 4-Level Paging (PML4, PDP, PD, PT). Support LA57?

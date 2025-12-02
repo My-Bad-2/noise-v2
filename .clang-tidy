@@ -1,6 +1,7 @@
 ---
 # Checks: A allow-list followed by specific suppressions
 Checks: >
+  -*
   # Enable Core Analyzers
   clang-analyzer-*,
   bugprone-*,
@@ -19,7 +20,6 @@ Checks: >
   modernize-use-override,
   modernize-use-using,
   modernize-use-bool-literals,
-  modernize-deprecated-headers,
   
   # --- SUPPRESSIONS ---
   
