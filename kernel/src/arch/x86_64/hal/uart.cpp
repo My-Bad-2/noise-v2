@@ -4,7 +4,7 @@
  *
  * This file contains the low-level implementation of `hal::UART16550`
  * using legacy I/O ports. All operations are blocking and suitable for
- * use in early boot and simple kernels.
+ * use in early boot.
  */
 
 #include "hal/uart.hpp"

@@ -1,5 +1,5 @@
 #include "arch.hpp"
-#include <stdio.h>
+#include "libs/log.hpp"
 
 namespace kernel {
 namespace {
@@ -7,15 +7,13 @@ extern "C" [[gnu::used]] uint8_t kstack[KSTACK_SIZE] = {};
 hal::IUART* kconsole = nullptr;
 }
 
-extern "C" void kmain() {
-    arch::init();
-
+extern "C" void kmain() {    
     kconsole = arch::get_kconsole();
     kconsole->init(115200);
-    // kconsole->send_string("Hello, World!\n");
 
-    printf("%s", "Hello, World!\n");
+    arch::init();
+    LOG_DEBUG("Hello, World!");
 
-    while(true){}
+    arch::halt(true);
 }
 }  // namespace kernel

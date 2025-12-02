@@ -9,6 +9,9 @@
  *
  * All functions are inline templates around inline assembly, and are
  * inherently architecture-specific and unsafe if misused.
+ *
+ * These utilities are not meant to be exposed as a stable public API;
+ * they are internal building blocks for the x86_64 HAL.
  */
 
 #pragma once
@@ -35,7 +38,7 @@ inline T in(uint16_t port) {
     T ret = 0;
 
     // NOLINTBEGIN
-    // Ignore `bugprone-branch-clone` check
+    // Ignore `bugprone-branch-clone` check: the pattern is intentional.
     if constexpr (std::same_as<T, uint8_t>) {
         asm volatile("inb %1, %0" : "=a"(ret) : "Nd"(port));
     } else if constexpr (std::same_as<T, uint16_t>) {
@@ -43,7 +46,7 @@ inline T in(uint16_t port) {
     } else if constexpr (std::same_as<T, uint32_t>) {
         asm volatile("inl %1, %0" : "=a"(ret) : "Nd"(port));
     } else {
-        static_assert(false, "Unsupported type size for hal::in() operation.");
+        static_assert(false, "Unsupported type size for kernel::hal::in() operation.");
     }
     // NOLINTEND
 
@@ -65,7 +68,7 @@ template <typename T>
     requires(sizeof(T) <= sizeof(uint32_t))
 inline void out(uint16_t port, T value) {
     // NOLINTBEGIN
-    // Ignore `bugprone-branch-clone` check
+    // Ignore `bugprone-branch-clone` check: the pattern is intentional.
     if constexpr (std::same_as<T, uint8_t>) {
         asm volatile("outb %0, %1" ::"a"(value), "Nd"(port));
     } else if constexpr (std::same_as<T, uint16_t>) {
@@ -73,7 +76,7 @@ inline void out(uint16_t port, T value) {
     } else if constexpr (std::same_as<T, uint32_t>) {
         asm volatile("outl %0, %1" ::"a"(value), "Nd"(port));
     } else {
-        static_assert(false, "Unsupported type size for hal::out() operation.");
+        static_assert(false, "Unsupported type size for kernel::hal::out() operation.");
     }
     // NOLINTEND
 }
@@ -86,6 +89,7 @@ inline void out(uint16_t port, T value) {
  * I/O operation, especially in early boot code.
  */
 inline void io_wait() {
+    // Use port 0x80 (historically unused) for a tiny delay.
     out<uint8_t>(0x80, 0);
 }
 

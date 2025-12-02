@@ -18,22 +18,7 @@ This roadmap outlines the development stages for a 64-bit microkernel using the 
     - [X] Initialize UART (COM1 at `0x3F8`) for serial logging.
     - [X] Implement `printf` utilizing UART. Use LLVM-libc for baremetal environment?
 
-## Phase 2: CPU & Interrupts
-*Goal: Handle hardware exceptions and hardware timers.*
-
-- [ ] **Global Descriptor Table (GDT)**
-    - [ ] Construct GDT with Kernel/User Code & Data segments.
-    - [ ] Setup TSS (Task State Segment) for interrupt stack switching.
-- [ ] **Interrupt Descriptor Table (IDT)**
-    - [ ] Define IDT structure.
-    - [ ] Implement Assembly ISR stubs (Save/Restore registers).
-    - [ ] Handle Critical Exceptions (`#GP`, `#PF`, `#DF`).
-- [ ] **Hardware Interrupts**
-    - [ ] Mask Legacy PIC (8259).
-    - [ ] Initialize LAPIC (Local APIC) per core.
-    - [ ] Calibrate APIC Timer for scheduling ticks.
-
-## Phase 3: Memory Management
+## Phase 2: Memory Management
 *Goal: Manage physical RAM and establish Virtual Memory for isolation.*
 
 - [ ] **Physical Memory Manager (PMM)**
@@ -47,6 +32,21 @@ This roadmap outlines the development stages for a 64-bit microkernel using the 
 - [ ] **Kernel Heap**
     - [ ] Implement a basic Slab Allocator or Linked List Allocator.
     - [ ] Expose `kmalloc` and `kfree`.
+
+## Phase 3: CPU & Interrupts
+*Goal: Handle hardware exceptions and hardware timers.*
+
+- [ ] **Global Descriptor Table (GDT)**
+    - [ ] Construct GDT with Kernel/User Code & Data segments.
+    - [ ] Setup TSS (Task State Segment) for interrupt stack switching.
+- [ ] **Interrupt Descriptor Table (IDT)**
+    - [ ] Define IDT structure.
+    - [ ] Implement Assembly ISR stubs (Save/Restore registers).
+    - [ ] Handle Critical Exceptions (`#GP`, `#PF`, `#DF`).
+- [ ] **Hardware Interrupts**
+    - [ ] Mask Legacy PIC (8259).
+    - [ ] Initialize LAPIC (Local APIC) per core.
+    - [ ] Calibrate APIC Timer for scheduling ticks.
 
 ## Phase 4: Microkernel Core (Scheduling & IPC)
 *Goal: The core logic allowing multiple tasks to exist and communicate.*

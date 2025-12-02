@@ -20,10 +20,12 @@ function(project_enable_doxygen DOXYGEN_THEME)
     if(NOT DOXYGEN_EXCLUDE_PATTERNS)
         set(
             DOXYGEN_EXCLUDE_PATTERNS 
-            "*/cache/*"
             "*/limine.h"
+            "*/_deps/*"
         )
     endif()
+
+    set(DOXYGEN_EXCLUDE "${CMAKE_SOURCE_DIR}/cache")
 
     if("${DOXYGEN_THEME}" STREQUAL "")
         set(DOXYGEN_THEME "awesome-sidebar")
