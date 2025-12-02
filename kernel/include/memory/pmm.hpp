@@ -12,35 +12,44 @@
  *  - The PMM is initialized very early (in `kernel::memory::init()`), so
  *    that virtual memory and other subsystems can request backing pages.
  *
- * ## Internal design (bitmap + stack cache)
+ * ## Internal design (bitmap + summary bitmap + stack cache)
  *
- * The PMM tracks page usage with two complementary mechanisms:
+ * The PMM tracks page usage with three cooperating mechanisms:
  *
  * 1. **Global bitmap (authoritative state)**
  *    - There is one bit per physical page.
  *    - Bit value `1`  => page is *allocated / in use*.
  *      Bit value `0`  => page is *free / available*.
- *    - All multi-page allocations and frees operate directly on this bitmap.
- *    - The bitmap is also used as the ground truth when rebuilding or
- *      flushing the stack cache.
+ *    - All multi-page allocations and frees ultimately operate on this bitmap.
+ *    - This is the ground truth for the allocator.
  *
- * 2. **Stack cache (fast path for single pages)**
+ * 2. **Summary bitmap (hierarchical fast-skip)**
+ *    - Each bit of the summary bitmap represents one *word* in the main
+ *      bitmap (i.e. 64 pages).
+ *    - Summary bit value `1`  => the corresponding 64-page block in the
+ *      main bitmap is completely full (all ones).
+ *      Summary bit value `0`  => the block has at least one free page.
+ *    - Single-page and multi-page searches can scan the summary bitmap
+ *      first to quickly skip over large fully-allocated regions (64 pages
+ *      at a time, or even 4096 pages when whole summary words are full).
+ *
+ * 3. **Stack cache (fast path for single pages)**
  *    - A small LIFO stack (`CACHE_SIZE` entries) holds physical addresses
  *      of recently freed **single** pages.
  *    - When you `alloc(1)`, the PMM first tries to `cache_pop()` from this
- *      stack; only if it’s empty does it fall back to scanning the bitmap.
+ *      stack; only if it’s empty does it fall back to bitmap/summary search.
  *    - When you `free(ptr, 1)`, the PMM tries to `cache_push(ptr)` into
  *      this stack instead of immediately updating the bitmap. If the stack
  *      is full, it flushes roughly half of the cached pages back into the
  *      bitmap (via `free_to_bitmap`) to free up cache space.
  *
- * This split design gives:
- *  - **Fast common case**: page-table and small-kernel allocations usually
- *    operate on single pages, which are served directly from the stack
- *    cache with O(1) cost.
- *  - **Compact global state**: the bitmap provides a compact and unified
- *    view of all physical memory, used for multi-page allocations and
- *    for rebuilding state if needed.
+ * This design gives:
+ *  - **Fast common case**: single-page operations are often served directly
+ *    from the stack cache.
+ *  - **Efficient global search**: the summary bitmap lets the allocator
+ *    skip large spans of fully-used memory during bitmap scans.
+ *  - **Compact representation**: the bitmaps still provide a compact,
+ *    unified view of all physical memory.
  */
 
 #pragma once

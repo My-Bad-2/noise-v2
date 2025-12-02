@@ -4,6 +4,10 @@
  *
  * Uses a bitmap to track page allocation state and a small stack-based
  * cache to accelerate single-page allocations and frees.
+ *
+ * A second-level *summary bitmap* marks which 64-page blocks are fully
+ * used, allowing the allocator to skip large contiguous allocated regions
+ * quickly when searching for free pages.
  */
 
 #include "memory/pmm.hpp"
@@ -19,13 +23,16 @@
 namespace kernel::memory {
 namespace {
 
-// Global PMM state (bitmap, stack cache, statistics, lock).
+// Global PMM state (bitmap, summary bitmap, stack cache, statistics, lock).
 struct {
-    uint_least64_t* bitmap = nullptr;  // Allocation bitmap.
-    size_t total_pages     = 0;        // Total number of managed pages.
-    size_t bitmap_entries  = 0;        // Number of 64-bit entries in the bitmap.
-    size_t free_idx_hint   = 0;        // Hint for next free-page search.
-    size_t used_pages      = 0;        // Number of currently used pages.
+    uint_least64_t* bitmap         = nullptr;  // Allocation bitmap (1 bit per page).
+    uint_least64_t* summary_bitmap = nullptr;  // Summary bitmap (1 bit per 64 pages).
+
+    size_t total_pages     = 0;  // Total number of managed pages.
+    size_t summary_entries = 0;  // Number of 64-bit entries in the summary bitmap.
+    size_t bitmap_entries  = 0;  // Number of 64-bit entries in the bitmap.
+    size_t free_idx_hint   = 0;  // Hint for next free-page search.
+    size_t used_pages      = 0;  // Number of currently used pages.
 
     // Stack cache for quick single-page allocations.
     uintptr_t* free_stack = nullptr;
@@ -45,13 +52,25 @@ void PhysicalManager::set_bit(size_t idx) {
     size_t bit  = idx % bit_count;
 
     pmm_state.bitmap[byte] |= (1ULL << bit);
+
+    // If this 64-page block becomes fully occupied (all bits set), mark it
+    // as full in the summary bitmap so future searches can skip it.
+    if (pmm_state.bitmap[byte] == static_cast<size_t>(-1)) {
+        size_t summary_byte = byte / bit_count;
+        pmm_state.summary_bitmap[summary_byte] |= (1ULL << (byte % bit_count));
+    }
 }
 
 void PhysicalManager::clear_bit(size_t idx) {
-    size_t byte = idx / bit_count;
-    size_t bit  = idx % bit_count;
+    size_t byte         = idx / bit_count;
+    size_t bit          = idx % bit_count;
+    size_t summary_byte = byte / bit_count;
 
     pmm_state.bitmap[byte] &= ~(1ULL << bit);
+
+    // This 64-page block is now definitely not full; mark it as such in
+    // the summary bitmap so it becomes a candidate during future scans.
+    pmm_state.summary_bitmap[summary_byte] &= ~(1ULL << (byte % bit_count));
 }
 
 bool PhysicalManager::test_bit(size_t idx) {
@@ -93,22 +112,72 @@ void PhysicalManager::flush_cache_to_bitmap() {
 void* PhysicalManager::alloc_from_bitmap(size_t count) {
     // Core bitmap-based allocation path (single or multi-page).
     if (count == 1) {
-        // Fast path for single-page allocations: use free_idx_hint.
-        size_t search_start = pmm_state.free_idx_hint / bit_count;
+        // Fast path for single-page allocations: use free_idx_hint and the
+        // summary bitmap to skip fully used 64-page groups quickly.
+        size_t search_start         = pmm_state.free_idx_hint / bit_count;
+        size_t search_start_summary = search_start / bit_count;
 
-        for (size_t i = search_start; i < pmm_state.bitmap_entries; ++i) {
-            uint_least64_t entry = pmm_state.bitmap[i];
+        for (size_t s = search_start_summary; s < pmm_state.summary_entries; ++s) {
+            // Each summary entry covers 64 bitmap entries = 4096 pages.
+            uint_least64_t summary_entry = pmm_state.summary_bitmap[s];
 
-            if (entry != static_cast<uint_least64_t>(-1)) {
-                int bit_offset = __builtin_ctzll(~entry);
-                size_t idx     = (i * bit_count) + static_cast<size_t>(bit_offset);
+            // 64 blocks (4096 pages) are totally full; skip them.
+            if (summary_entry == static_cast<uint_least64_t>(-1)) {
+                continue;
+            }
 
-                if (idx < pmm_state.total_pages) {
-                    set_bit(idx);
-                    pmm_state.used_pages++;
-                    pmm_state.free_idx_hint = idx + 1;
+            // Find a bitmap word (block of 64 pages) with at least one free page.
+            int block_offset = __builtin_ctzll(~summary_entry);
+            size_t map_idx   = (s * bit_count) + static_cast<size_t>(block_offset);
 
-                    return reinterpret_cast<void*>(idx * PMM_PAGE_SIZE);
+            // Now verify the actual bitmap word.
+            if (map_idx < pmm_state.bitmap_entries) {
+                uint_least64_t entry = pmm_state.bitmap[map_idx];
+
+                if (entry != static_cast<uint_least64_t>(-1)) {
+                    // Find a free bit inside this word.
+                    int bit_offset = __builtin_ctzll(~entry);
+                    size_t idx     = (map_idx * bit_count) + static_cast<size_t>(bit_offset);
+
+                    if (idx < pmm_state.total_pages) {
+                        set_bit(idx);
+                        pmm_state.used_pages++;
+                        pmm_state.free_idx_hint = idx + 1;
+
+                        return reinterpret_cast<void*>(idx * PMM_PAGE_SIZE);
+                    }
+                }
+            }
+        }
+
+        // Wrap around: if we started past 0, scan from 0 to the start hint.
+        if (pmm_state.free_idx_hint > 0) {
+            for (size_t s = 0; s < search_start_summary; ++s) {
+                uint_least64_t summary_entry = pmm_state.summary_bitmap[s];
+
+                // 64 blocks (4096 pages) are totally full; skip them.
+                if (summary_entry == static_cast<uint_least64_t>(-1)) {
+                    continue;
+                }
+
+                int block_offset = __builtin_ctzll(~summary_entry);
+                size_t map_idx   = (s * bit_count) + static_cast<size_t>(block_offset);
+
+                if (map_idx < pmm_state.bitmap_entries) {
+                    uint_least64_t entry = pmm_state.bitmap[map_idx];
+
+                    if (entry != static_cast<uint_least64_t>(-1)) {
+                        int bit_offset = __builtin_ctzll(~entry);
+                        size_t idx     = (map_idx * bit_count) + static_cast<size_t>(bit_offset);
+
+                        if (idx < pmm_state.total_pages) {
+                            set_bit(idx);
+                            pmm_state.used_pages++;
+                            pmm_state.free_idx_hint = idx + 1;
+
+                            return reinterpret_cast<void*>(idx * PMM_PAGE_SIZE);
+                        }
+                    }
                 }
             }
         }
@@ -118,10 +187,27 @@ void* PhysicalManager::alloc_from_bitmap(size_t count) {
             size_t consecutive = 0;
 
             for (size_t i = start; i < end; ++i) {
-                // Skip full 64-page words if we have no partial match.
                 if ((consecutive == 0) && ((i % bit_count) == 0)) {
-                    if (((i / 64) < pmm_state.bitmap_entries) &&
-                        (pmm_state.bitmap[i / bit_count] == static_cast<uint_least64_t>(-1))) {
+                    size_t map_idx = i / bit_count;
+
+                    // If this bitmap word is full, consider skipping larger chunks.
+                    if ((map_idx < pmm_state.bitmap_entries) &&
+                        (pmm_state.bitmap[map_idx] == static_cast<size_t>(-1))) {
+                        // Check if the entire "superpage" (64 words = 4096 pages)
+                        // is full using the summary bitmap.
+                        if ((map_idx % bit_count) == 0) {
+                            size_t summary_idx = map_idx / bit_count;
+
+                            if ((summary_idx < pmm_state.summary_entries) &&
+                                (pmm_state.summary_bitmap[summary_idx] ==
+                                 static_cast<size_t>(-1))) {
+                                // Massive skip: 4096 pages.
+                                i += (bit_count * bit_count) - 1;
+                                continue;
+                            }
+                        }
+
+                        // Otherwise, skip this 64-page word.
                         i += 63;
                         continue;
                     }
@@ -241,8 +327,8 @@ void* PhysicalManager::alloc_aligned(size_t count, size_t alignment) {
                 pmm_state.free_idx_hint = curr + count;
 
                 void* addr = reinterpret_cast<void*>(curr * PMM_PAGE_SIZE);
-                LOG_DEBUG("PMM alloc_aligned count=%zu align=0x%zx addr=%p used_pages=%zu",
-                          count, alignment, addr, pmm_state.used_pages);
+                LOG_DEBUG("PMM alloc_aligned count=%zu align=0x%zx addr=%p used_pages=%zu", count,
+                          alignment, addr, pmm_state.used_pages);
                 return addr;
             }
         }
@@ -353,8 +439,8 @@ void PhysicalManager::reclaim_type(size_t memmap_type) {
             if (end_aligned > base_aligned) {
                 size_t pages = (end_aligned - base_aligned) / PMM_PAGE_SIZE;
                 free(reinterpret_cast<void*>(base_aligned), pages);
-                LOG_INFO("PMM reclaimed type=%zu base=0x%lx pages=%zu",
-                         memmap_type, base_aligned, pages);
+                LOG_INFO("PMM reclaimed type=%zu base=0x%lx pages=%zu", memmap_type, base_aligned,
+                         pages);
             }
         }
     }
@@ -403,13 +489,22 @@ void PhysicalManager::init() {
     }
 
     pmm_state.total_pages = div_roundup(highest_addr, PMM_PAGE_SIZE);
+    LOG_INFO("PMM: highest_addr=0x%lx total_pages=%zu", highest_addr, pmm_state.total_pages);
 
     size_t bitmap_bytes      = align_up(div_roundup(pmm_state.total_pages, 8u), 8u);
     pmm_state.bitmap_entries = bitmap_bytes / 8;
 
+    // Calculate summary bitmap size: one bit per bitmap entry.
+    size_t summary_bits       = pmm_state.bitmap_entries;
+    size_t summary_bytes      = align_up(div_roundup(summary_bits, 8u), 8u);
+    pmm_state.summary_entries = summary_bytes / 8;
+
     // Stack cache size (for stack array).
     size_t stack_bytes          = CACHE_SIZE * sizeof(uintptr_t);
-    size_t total_metadata_bytes = bitmap_bytes + stack_bytes;
+    size_t total_metadata_bytes = bitmap_bytes + summary_bytes + stack_bytes;
+
+    LOG_DEBUG("PMM: bitmap_bytes=%zu summary_bytes=%zu stack_bytes=%zu metadata_total=%zu",
+              bitmap_bytes, summary_bytes, stack_bytes, total_metadata_bytes);
 
     // Find suitable hole for metadata.
     limine_memmap_entry* best_candidate = nullptr;
@@ -446,6 +541,9 @@ void PhysicalManager::init() {
     }
 
     uintptr_t meta_base = best_candidate->base;
+    LOG_INFO("PMM: using metadata base=0x%lx in region (base=0x%lx len=0x%lx)", meta_base,
+             best_candidate->base, best_candidate->length);
+
     if (meta_base == 0) {
         meta_base += PMM_PAGE_SIZE;
         best_candidate->length -= PMM_PAGE_SIZE;
@@ -465,28 +563,41 @@ void PhysicalManager::init() {
     // Bitmap starts at metadata base.
     pmm_state.bitmap = reinterpret_cast<uintptr_t*>(metadata_virt_addr);
 
-    // Stack cache follows bitmap.
-    pmm_state.free_stack = reinterpret_cast<uintptr_t*>(metadata_virt_addr + bitmap_bytes);
+    // Place summary bitmap after main bitmap.
+    pmm_state.summary_bitmap = reinterpret_cast<uintptr_t*>(metadata_virt_addr + bitmap_bytes);
+
+    // Stack cache follows the bitmaps.
+    pmm_state.free_stack =
+        reinterpret_cast<uintptr_t*>(metadata_virt_addr + bitmap_bytes + summary_bytes);
 
     pmm_state.stack_capacity = CACHE_SIZE;
     pmm_state.stack_top      = 0;
 
+    LOG_DEBUG("PMM: bitmap@%lp (%zu entries), summary@%p (%zu entries), stack@%p", pmm_state.bitmap,
+              pmm_state.bitmap_entries, pmm_state.summary_bitmap, pmm_state.summary_entries,
+              pmm_state.free_stack);
+
     // Initially mark all pages as used.
     memset(pmm_state.bitmap, 0xFF, bitmap_bytes);
+    memset(pmm_state.summary_bitmap, 0xFF, summary_bytes);
     pmm_state.used_pages = pmm_state.total_pages;
 
     // Populate free memory from Limine map.
+    size_t reclaimed_pages = 0;
     for (size_t i = 0; i < memmap_count; ++i) {
         limine_memmap_entry* entry = memmaps[i];
 
         if (entry->type == LIMINE_MEMMAP_USABLE) {
             size_t pages = entry->length / PMM_PAGE_SIZE;
+            reclaimed_pages += pages;
             free(reinterpret_cast<void*>(entry->base), pages);
         }
     }
 
-    LOG_INFO("PMM initialized: total_pages=%zu (~%zu MiB)", pmm_state.total_pages,
-             (pmm_state.total_pages * PMM_PAGE_SIZE) >> 20);
+    PMMStats stats = get_stats();
+    LOG_INFO("PMM initialized: total_pages=%zu (~%zu MiB), reclaimed_pages=%zu, free=%zu MiB",
+             pmm_state.total_pages, (pmm_state.total_pages * PMM_PAGE_SIZE) >> 20, reclaimed_pages,
+             stats.free_memory >> 20);
 }
 
 }  // namespace kernel::memory
