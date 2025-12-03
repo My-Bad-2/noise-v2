@@ -2,7 +2,6 @@
 .global _start
 
 .extern kmain
-.extern kstack
 .extern limine_base_revision
 
 _start:
@@ -21,15 +20,6 @@ _start:
     movq limine_base_revision + 16(%rip), %rax
     testq %rax, %rax
     jnz .Llimine_unsupported // If limine_base_revision[2] != 0, revision is not supported.
-
-    // Setup Stack Pointer
-    // `kstack` is the address of the start of the array.
-    // The stack grows DOWN, so RSP must start at the END of the array.
-    leaq kstack(%rip), %rsp // Load address of array start
-    addq $KSTACK_SIZE, %rsp // Move pointer to top of stack
-
-    // SysV abi requires RSP to be 16-byte aligned before a call
-    andq $-16, %rsp
 
     // Zero RBP to mark the end of stack frames for debuggers/unwinders.
     xorq %rbp, %rbp

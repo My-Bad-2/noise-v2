@@ -1,0 +1,159 @@
+#include "boot/limine.h"
+#include "libs/log.hpp"
+#include "memory/memory.hpp"
+#include "memory/pagemap.hpp"
+#include "boot/boot.h"
+#include "libs/elf.h"
+#include "libs/math.hpp"
+
+// NOLINTBEGIN(performance-no-int-to-ptr)
+namespace kernel::memory {
+namespace {
+// Global kernel page map used as the bootstrap address space.
+PageMap kernel_pagemap = PageMap();
+
+/**
+ * @brief Convert ELF segment flags into internal paging flags.
+ *
+ * The logic here encodes the kernel's policy for what an executable
+ * segment is allowed to do (e.g. R+X, no W+X).
+ */
+uint8_t convert_elf_flags(uint32_t p_flags) {
+    uint8_t flags = Read;
+
+    if (p_flags & PF_W) {
+        flags |= Write;
+    }
+
+    if (p_flags & PF_X) {
+        flags |= Execute;
+    }
+
+    return flags;
+}
+}  // namespace
+
+void VirtualManager::map_pagemap() {
+    if (memmap_request.response == nullptr) {
+        PANIC("Memmap request failed");
+    }
+
+    struct limine_memmap_entry** memmaps = memmap_request.response->entries;
+    size_t memmap_count                  = memmap_request.response->entry_count;
+
+    // Initialize global paging state (CR0/CR4/EFER tweaks, feature detection).
+    PageMap::global_init();
+
+    // Create the kernel's root page map; user maps can later clone from this.
+    PageMap::create_new(&kernel_pagemap);
+
+    for (size_t i = 0; i < memmap_count; ++i) {
+        struct limine_memmap_entry* entry = memmaps[i];
+
+        bool should_map      = false;
+        CacheType cache_type = CacheType::WriteBack;
+
+        // Decide which regions become part of the linear higher-half map.
+        switch (entry->type) {
+            case LIMINE_MEMMAP_USABLE:
+            case LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE:
+            case LIMINE_MEMMAP_EXECUTABLE_AND_MODULES:
+            case LIMINE_MEMMAP_ACPI_RECLAIMABLE:
+            case LIMINE_MEMMAP_ACPI_NVS:
+            case LIMINE_MEMMAP_ACPI_TABLES:
+                should_map = true;
+                cache_type = CacheType::WriteBack;
+                break;
+            case LIMINE_MEMMAP_FRAMEBUFFER:
+                should_map = true;
+                cache_type = CacheType::WriteCombining;
+                break;
+            default:
+                should_map = false;
+                break;
+        }
+
+        if (should_map) {
+            uintptr_t virt_addr = to_higher_half(entry->base);
+            uint8_t flags       = Read;
+
+            // Most kernel direct-map regions are writable; ACPI tables/NVS
+            // remain read-only to avoid accidental corruption.
+            if ((entry->type != LIMINE_MEMMAP_ACPI_TABLES) ||
+                (entry->type != LIMINE_MEMMAP_ACPI_NVS)) {
+                flags |= Write;
+            }
+
+            LOG_DEBUG("VMM: mapping phys=0x%lx -> virt=0x%lx len=0x%lx type=%u",
+                      entry->base, virt_addr, entry->length, entry->type);
+
+            kernel_pagemap.map_range(virt_addr, entry->base, entry->length, flags, cache_type);
+        }
+    }
+}
+
+void VirtualManager::map_kernel() {
+    if ((kernel_address_request.response == nullptr) || (kernel_file_request.response == nullptr)) {
+        PANIC("Kernel file or address request missing");
+    }
+
+    struct limine_file* kfile = kernel_file_request.response->executable_file;
+    Elf64_Ehdr* ehdr          = static_cast<Elf64_Ehdr*>(kfile->address);
+
+    // Verify magic
+    if ((ehdr->e_ident[EI_MAG0] != ELFMAG0) || (ehdr->e_ident[EI_MAG1] != ELFMAG1) ||
+        (ehdr->e_ident[EI_MAG2] != ELFMAG2) || (ehdr->e_ident[EI_MAG3] != ELFMAG3)) {
+        PANIC("Kernel is not a valid ELF file!");
+    }
+
+    uintptr_t virt_base = kernel_address_request.response->virtual_base;
+    uintptr_t phys_base = kernel_address_request.response->physical_base;
+
+    // Physical offset expresses how the kernel image is relocated in RAM
+    // relative to its link-time virtual base.
+    int64_t phys_offset = static_cast<int64_t>(phys_base - virt_base);
+
+    Elf64_Phdr* phdr =
+        reinterpret_cast<Elf64_Phdr*>(reinterpret_cast<uintptr_t>(ehdr) + ehdr->e_phoff);
+
+    for (int i = 0; i < ehdr->e_phnum; ++i) {
+        if (phdr[i].p_type == PT_LOAD) {
+            uintptr_t seg_virt_start = phdr[i].p_vaddr;
+            size_t seg_memsz         = phdr[i].p_memsz;
+            uint8_t seg_flags        = convert_elf_flags(phdr[i].p_flags);
+
+            uintptr_t start_aligned = align_down(seg_virt_start, PAGE_SIZE_4K);
+            uintptr_t end_aligned   = align_up(seg_virt_start + seg_memsz, PAGE_SIZE_4K);
+            size_t size_aligned     = end_aligned - start_aligned;
+
+            uintptr_t phys_start = start_aligned + static_cast<uintptr_t>(phys_offset);
+
+            LOG_DEBUG("VMM: mapping kernel segment v=0x%lx p=0x%lx size=0x%lx flags=0x%x",
+                      start_aligned, phys_start, size_aligned, seg_flags);
+
+            kernel_pagemap.map_range(
+                start_aligned,
+                phys_start,
+                size_aligned,
+                seg_flags,
+                CacheType::WriteBack);
+        }
+    }
+}
+
+void VirtualManager::init() {
+    // Build the higher-half identity map plus kernel segments, then
+    // activate it via CR3; after this, all code runs in the "real" kernel VA.
+    map_pagemap();
+    map_kernel();
+
+    kernel_pagemap.load(0, true);
+}
+
+PageMap* PageMap::get_kernel_map() {
+    // Expose the kernel root map so new address spaces can share kernel
+    // mappings (upper half) using create_new().
+    return &kernel_pagemap;
+}
+}  // namespace kernel::memory
+// NOLINTEND(performance-no-int-to-ptr)

@@ -10,6 +10,7 @@
 #include "memory/memory.hpp"
 #include "memory/pmm.hpp"
 #include "libs/log.hpp"
+#include "memory/pagemap.hpp"
 
 namespace kernel::memory {
 namespace __details {
@@ -23,6 +24,9 @@ void init() {
 
     // Initialize the physical memory manager.
     PhysicalManager::init();
+
+    // Initialize the Virtual memory manager.
+    VirtualManager::init();
 }
 
 }  // namespace kernel::memory

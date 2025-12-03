@@ -26,9 +26,9 @@ This roadmap outlines the development stages for a 64-bit microkernel using the 
     - [X] Implement Bitmap with Hot Cache stack for 4KiB page tracking.
 - [ ] **Virtual Memory Manager (VMM)**
     - [X] Retrieve HHDM (Higher Half Direct Map) offset from Limine.
-    - [ ] Implement x86_64 4-Level Paging (PML4, PDP, PD, PT). Support LA57?
-    - [ ] Create `map` and `unmap` functions.
-    - [ ] Bootstrap the Kernel Page Table (Higher Half mapping).
+    - [X] Implement x86_64 4-Level Paging (PML4, PDP, PD, PT). Support LA57?
+    - [X] Create `map` and `unmap` functions.
+    - [X] Bootstrap the Kernel Page Table (Higher Half mapping).
 - [ ] **Kernel Heap**
     - [ ] Implement a basic Slab Allocator or Linked List Allocator.
     - [ ] Expose `kmalloc` and `kfree`.

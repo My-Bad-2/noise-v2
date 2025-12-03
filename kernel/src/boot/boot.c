@@ -24,3 +24,37 @@ volatile struct limine_hhdm_request hhdm_request = {
     .revision = 0,
     .response = nullptr,
 };
+
+[[gnu::section(".requests")]]
+volatile struct limine_executable_address_request kernel_address_request = {
+    .id       = LIMINE_EXECUTABLE_ADDRESS_REQUEST_ID,
+    .revision = 0,
+    .response = nullptr,
+};
+
+[[gnu::section(".requests")]]
+volatile struct limine_executable_file_request kernel_file_request = {
+    .id       = LIMINE_EXECUTABLE_FILE_REQUEST_ID,
+    .revision = 0,
+    .response = nullptr,
+};
+
+[[gnu::section(".requests")]]
+volatile struct limine_paging_mode_request paging_mode_request = {
+    .id = LIMINE_PAGING_MODE_REQUEST_ID,
+    .revision = 0,
+    .response = nullptr,
+#ifdef __x86_64__
+    .mode = LIMINE_PAGING_MODE_X86_64_4LVL,
+    .max_mode = LIMINE_PAGING_MODE_X86_64_5LVL,
+    .min_mode = LIMINE_PAGING_MODE_X86_64_4LVL,
+#endif
+};
+
+[[gnu::section(".requests")]]
+volatile struct limine_stack_size_request stack_size_request = {
+    .id = LIMINE_STACK_SIZE_REQUEST_ID,
+    .revision = 0,
+    .response = nullptr,
+    .stack_size = KSTACK_SIZE,
+};

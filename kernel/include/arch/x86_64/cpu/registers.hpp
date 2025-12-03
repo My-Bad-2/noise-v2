@@ -1,14 +1,28 @@
+/**
+ * @file registers.hpp
+ * @brief Strongly-typed wrappers around x86_64 control registers and MSRs.
+ *
+ * Instead of manually shuffling raw 64-bit values in inline assembly,
+ * these structures provide:
+ *  - Bitfield views for commonly used control bits.
+ *  - `read()`/`write()` helpers that encapsulate the asm instructions.
+ *
+ * This reduces the risk of mistakes when toggling paging, NX, PCID, etc.
+ */
+
 #pragma once
 
 #include <cstdint>
 
 namespace kernel::arch {
-#include <stdint.h>
-
+    
+// CR0: basic CPU control (paging, write-protection, etc.).
 struct Cr0 {
     union {
         uint64_t raw;
         struct {
+            // The bit layout matches Intel/AMD manuals; only select fields
+            // are named to avoid overconstraining future use.
             uint64_t protected_mode      : 1;
             uint64_t monitor_coprocessor : 1;
             uint64_t emulation           : 1;
@@ -31,6 +45,7 @@ struct Cr0 {
     void write();
 };
 
+// CR2: holds the faulting linear address on page faults.
 struct Cr2 {
     uint64_t linear_address;
 
@@ -38,6 +53,7 @@ struct Cr2 {
     void write();
 };
 
+// CR3: holds the root paging-structure physical address, optionally PCID.
 struct Cr3 {
     union {
         uint64_t raw;
@@ -61,6 +77,7 @@ struct Cr3 {
     void write();
 };
 
+// CR4: extended CPU control flags (PGE, SMEP, PCID, etc.).
 struct Cr4 {
     union {
         uint64_t raw;
@@ -96,6 +113,31 @@ struct Cr4 {
     };
 
     static Cr4 read();
+    void write();
+};
+
+// INVPCID descriptor and type: model the hardware format directly.
+enum class InvpcidType : uint8_t {
+    IndivdualAddress       = 0,
+    SingleContext          = 1,
+    AllContexts            = 2,
+    AllContextsRetainGlobals = 3,
+};
+
+struct InvpcidDesc {
+    uint64_t pcid : 12;
+    uint64_t rsvd : 52;
+    uint64_t addr;
+
+    void flush(InvpcidType type);
+};
+
+// MSR wrapper: encapsulates rdmsr/wrmsr usage for a single index.
+struct Msr {
+    uint32_t index;
+    uint64_t value;
+
+    static Msr read(uint32_t index);
     void write();
 };
 }  // namespace kernel::arch

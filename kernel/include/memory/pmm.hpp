@@ -23,6 +23,10 @@
  *    - All multi-page allocations and frees ultimately operate on this bitmap.
  *    - This is the ground truth for the allocator.
  *
+ *    The choice of a bitmap is about *compactness* and *cache locality*:
+ *    memory usage scales linearly with total pages, and scanning over
+ *    contiguous physical ranges is friendly to CPU caches.
+ *
  * 2. **Summary bitmap (hierarchical fast-skip)**
  *    - Each bit of the summary bitmap represents one *word* in the main
  *      bitmap (i.e. 64 pages).
@@ -32,6 +36,11 @@
  *    - Single-page and multi-page searches can scan the summary bitmap
  *      first to quickly skip over large fully-allocated regions (64 pages
  *      at a time, or even 4096 pages when whole summary words are full).
+ *
+ *    The summary layer is a *micro index* over the main bitmap: it trades
+ *    a small amount of extra metadata for the ability to avoid touching
+ *    obviously-full regions at all. This keeps allocation latency more
+ *    stable under heavy fragmentation or high occupancy.
  *
  * 3. **Stack cache (fast path for single pages)**
  *    - A small LIFO stack (`CACHE_SIZE` entries) holds physical addresses
@@ -43,11 +52,18 @@
  *      is full, it flushes roughly half of the cached pages back into the
  *      bitmap (via `free_to_bitmap`) to free up cache space.
  *
+ *    The stack cache exists for *temporal locality*: many kernel patterns
+ *    (page table churn, short-lived buffers) free and reallocate the same
+ *    number of single pages in bursts. Serving those from a tiny hot
+ *    structure avoids repeated bitmap walks and reduces contention on the
+ *    global PMM state.
+ *
  * This design gives:
  *  - **Fast common case**: single-page operations are often served directly
  *    from the stack cache.
  *  - **Efficient global search**: the summary bitmap lets the allocator
- *    skip large spans of fully-used memory during bitmap scans.
+ *    skip large spans of fully-used memory during bitmap scans instead of
+ *    linearly probing every word.
  *  - **Compact representation**: the bitmaps still provide a compact,
  *    unified view of all physical memory.
  */

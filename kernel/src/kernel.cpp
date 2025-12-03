@@ -4,8 +4,7 @@
 
 namespace kernel {
 namespace {
-extern "C" [[gnu::used]] uint8_t kstack[KSTACK_SIZE] = {};
-hal::IUART* kconsole                                 = nullptr;
+hal::IUART* kconsole = nullptr;
 }  // namespace
 
 extern "C" void kmain() {

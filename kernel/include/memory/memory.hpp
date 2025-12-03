@@ -6,12 +6,23 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 
 namespace kernel::memory {
 namespace __details {
 /// Higher-half direct-map offset (set during memory::init()).
 extern uintptr_t hhdm_offset;
 }  // namespace __details
+
+enum class PageSize : uint8_t {
+    Size4K,
+    Size2M,
+    Size1G,
+};
+
+constexpr size_t PAGE_SIZE_4K = 4096ull;
+constexpr size_t PAGE_SIZE_2M = 2 * 1024ull * 1024;
+constexpr size_t PAGE_SIZE_1G = 1 * 1024ull * 1024 * 1024;
 
 #ifndef __clang__
 #pragma GCC diagnostic push

@@ -148,38 +148,45 @@ set(
 	--protective-msdos-label
 )
 
-set(QEMU_LOGFILE "${CMAKE_BINARY_DIR}/qemu/logs.txt")
+set(QEMU_LOGFILE "${CMAKE_BINARY_DIR}/qemu-logs.txt")
 
 set(
 	QEMU_COMMON_FLAGS
-	"-m" "512M"
-	"-no-reboot"
-	"-no-shutdown"
-	"-serial" "stdio"
-	"-rtc" "base=localtime"
-	"-boot" "order=d,menu=on,splash-time=0"
+	-m 512M
+	-no-reboot
+	-no-shutdown
+	-serial stdio
+	-rtc base=localtime
+	-boot order=d,menu=on,splash-time=0
 )
 
 if(${PROJECT_NAME}_ARCHITECTURE STREQUAL "x86_64")
 	list(
 		APPEND
 		QEMU_COMMON_FLAGS
-		"-cpu" "max,migratable=off,+invtsc,+tsc-deadline"
-		"-M" "q35,smm=off"
+		-M q35,smm=off
 	)
 endif()
 
 if(${PROJECT_NAME}_QEMU_VNC)
-	list(APPEND QEMU_COMMON_FLAGS "-vnc 127.0.0.1:1")
+	list(APPEND QEMU_COMMON_FLAGS -vnc 127.0.0.1:1)
 endif()
 
 set(
 	QEMU_DEBUG_FLAGS
-	"-d" "int" # Log CPU Interrupts
-	"-d" "guest_errors" # Log when OS accesses invalid hardware addresses
-	"-D" "${QEMU_LOGFILE}"
-	"-S" # Freeze CU at startup (wait for 'c' command in Debugger)
-	"-s" # Short for `-gdb tcp::1234`
+	-d int # Log CPU Interrupts
+	-d guest_errors # Log when OS accesses invalid hardware addresses
+	-D ${QEMU_LOGFILE}
+	-S # Freeze CU at startup (wait for 'c' command in Debugger)
+	-s # Short for `-gdb tcp::1234`
 )
 
-set(QEMU_HARDWARE_ACCEL_FLAGS "-M" "accel=kvm:hvf:whpx:haxm:tcg")
+if(${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Linux")
+	set(QEMU_HARDWARE_ACCEL_FLAGS -enable-kvm -cpu max)
+elseif(${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Darwin")
+	set(QEMU_HARDWARE_ACCEL_FLAGS -accel hvf -cpu host)
+elseif(${CMAKE_HOST_SYSTEM} STREQUAL "Windows")
+	set(QEMU_HARDWARE_ACCEL_FLAGS -accel whpx)
+else()
+	set(QEMU_HARDWARE_ACCEL_FLAGS "")
+endif()
