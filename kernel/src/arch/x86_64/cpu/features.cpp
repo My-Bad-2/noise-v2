@@ -10,8 +10,8 @@ bool check_feature(unsigned int leaf, int reg_idx, int bit) {
     // If CPUID for this leaf is not supported, we conservatively report
     // "feature absent" and avoid relying on that capability.
     if (!__get_cpuid(leaf, &eax, &ebx, &ecx, &edx)) {
-        LOG_DEBUG("CPUID leaf=0x%x unsupported; feature (reg=%d bit=%d) assumed absent",
-                  leaf, reg_idx, bit);
+        LOG_DEBUG("CPUID leaf=0x%x unsupported; feature (reg=%d bit=%d) assumed absent", leaf,
+                  reg_idx, bit);
         return false;
     }
 

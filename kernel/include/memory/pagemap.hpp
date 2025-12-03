@@ -106,23 +106,4 @@ class PageMap {
     uintptr_t phys_root_addr;
 };
 
-class VirtualManager {
-   public:
-    /**
-     * @brief Build the higher-half direct map from the Limine memmap.
-     */
-    static void map_pagemap();
-
-    /**
-     * @brief Map the kernel ELF image into the new virtual address space.
-     */
-    static void map_kernel();
-
-    /**
-     * @brief Initialize the kernel's virtual memory layout and activate it.
-     */
-    static void init();
-
-    static PageMap* get_kmap();
-};
 }  // namespace kernel::memory

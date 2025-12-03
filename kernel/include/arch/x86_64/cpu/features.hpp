@@ -113,4 +113,4 @@ namespace kernel::arch {
  * @return true if CPUID succeeded and the bit is 1, false otherwise.
  */
 bool check_feature(unsigned int leaf, int reg_idx, int bit);
-}
+}  // namespace kernel::arch

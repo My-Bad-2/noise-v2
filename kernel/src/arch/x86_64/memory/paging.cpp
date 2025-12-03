@@ -451,8 +451,8 @@ void PageMap::create_new(PageMap* map) {
     }
 
     map->phys_root_addr = reinterpret_cast<uintptr_t>(root_phys);
-    LOG_DEBUG("PageMap::create_new root_phys=0x%lx kernel_initialized=%d",
-              map->phys_root_addr, kernel_initialized);
+    LOG_DEBUG("PageMap::create_new root_phys=0x%lx kernel_initialized=%d", map->phys_root_addr,
+              kernel_initialized);
 }
 
 void PageMap::load(uint16_t pcid, bool preserve_tlb) {
@@ -575,8 +575,8 @@ void PageMap::global_init() {
 
     init_pat();
 
-    LOG_INFO("Paging: initialized (levels=%d 1G=%d PCID=%d)",
-             g_max_levels, support_1g_pages, pcid_supported);
+    LOG_INFO("Paging: initialized (levels=%d 1G=%d PCID=%d)", g_max_levels, support_1g_pages,
+             pcid_supported);
 }
 }  // namespace kernel::memory
 // NOLINTEND(bugprone-easily-swappable-parameters)

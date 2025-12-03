@@ -10,7 +10,7 @@
 #include "memory/memory.hpp"
 #include "memory/pmm.hpp"
 #include "libs/log.hpp"
-#include "memory/pagemap.hpp"
+#include "memory/vmm.hpp"
 
 namespace kernel::memory {
 namespace __details {

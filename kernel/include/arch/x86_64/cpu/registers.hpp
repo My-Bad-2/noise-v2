@@ -15,7 +15,7 @@
 #include <cstdint>
 
 namespace kernel::arch {
-    
+
 // CR0: basic CPU control (paging, write-protection, etc.).
 struct Cr0 {
     union {
@@ -118,9 +118,9 @@ struct Cr4 {
 
 // INVPCID descriptor and type: model the hardware format directly.
 enum class InvpcidType : uint8_t {
-    IndivdualAddress       = 0,
-    SingleContext          = 1,
-    AllContexts            = 2,
+    IndivdualAddress         = 0,
+    SingleContext            = 1,
+    AllContexts              = 2,
     AllContextsRetainGlobals = 3,
 };
 

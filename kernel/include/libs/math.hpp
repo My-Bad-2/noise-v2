@@ -1,3 +1,13 @@
+/**
+ * @file math.hpp
+ * @brief Small arithmetic helpers used across kernel subsystems.
+ *
+ * Currently provides generic alignment and division helpers that operate
+ * on integral types. These are heavily used by the PMM, paging code,
+ * and virtual memory manager to keep address and size calculations
+ * concise and consistent.
+ */
+
 #include <concepts>
 
 namespace kernel {
