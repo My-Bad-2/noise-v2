@@ -11,7 +11,6 @@
 #include "memory/pmm.hpp"
 #include "libs/log.hpp"
 #include "memory/vmm.hpp"
-#include "memory/heap.hpp"
 
 namespace kernel::memory {
 namespace __details {
@@ -28,8 +27,6 @@ void init() {
 
     // Initialize the Virtual memory manager.
     VirtualManager::init();
-
-    asm volatile("sti");
 }
 
 }  // namespace kernel::memory
