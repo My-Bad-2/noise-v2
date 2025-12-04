@@ -28,9 +28,8 @@ void init() {
 
     // Initialize the Virtual memory manager.
     VirtualManager::init();
-    
-    KernelHeap& kheap = KernelHeap::instance();
-    kheap.init();
+
+    asm volatile("sti");
 }
 
 }  // namespace kernel::memory

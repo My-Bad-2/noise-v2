@@ -175,7 +175,7 @@ endif()
 set(
 	QEMU_DEBUG_FLAGS
 	-d int # Log CPU Interrupts
-	-d guest_errors # Log when OS accesses invalid hardware addresses
+	# -d guest_errors # Log when OS accesses invalid hardware addresses
 	-D ${QEMU_LOGFILE}
 	-S # Freeze CU at startup (wait for 'c' command in Debugger)
 	-s # Short for `-gdb tcp::1234`

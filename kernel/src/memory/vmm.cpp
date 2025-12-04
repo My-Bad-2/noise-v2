@@ -135,10 +135,6 @@ void VirtualManager::map_kernel() {
     uintptr_t virt_base = kernel_address_request.response->virtual_base;
     uintptr_t phys_base = kernel_address_request.response->physical_base;
 
-    // Physical offset expresses how the kernel image is relocated in RAM
-    // relative to its link-time virtual base.
-    int64_t phys_offset = static_cast<int64_t>(phys_base - virt_base);
-
     Elf64_Phdr* phdr =
         reinterpret_cast<Elf64_Phdr*>(reinterpret_cast<uintptr_t>(ehdr) + ehdr->e_phoff);
 
@@ -152,7 +148,7 @@ void VirtualManager::map_kernel() {
             uintptr_t end_aligned   = align_up(seg_virt_start + seg_memsz, PAGE_SIZE_4K);
             size_t size_aligned     = end_aligned - start_aligned;
 
-            uintptr_t phys_start = start_aligned + static_cast<uintptr_t>(phys_offset);
+            uintptr_t phys_start = start_aligned - virt_base + phys_base;
 
             LOG_DEBUG("VMM: mapping kernel segment v=0x%lx p=0x%lx size=0x%lx flags=0x%x",
                       start_aligned, phys_start, size_aligned, seg_flags);

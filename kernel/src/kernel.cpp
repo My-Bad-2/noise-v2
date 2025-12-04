@@ -2,7 +2,6 @@
 #include "libs/log.hpp"
 #include "memory/memory.hpp"
 
-
 namespace kernel {
 namespace {
 hal::IUART* kconsole = nullptr;
