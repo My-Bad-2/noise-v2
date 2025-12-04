@@ -99,7 +99,7 @@ bool CowManager::handle_fault(uintptr_t virt_addr, PageMap* map) {
 
     // Map new physical frame in higher half and copy contents.
     // Currently we know the old page is all-zero, so we just memset.
-    void* new_virt = reinterpret_cast<void*>(to_higher_half(new_phys));  // NOLINTNEXTLINE
+    void* new_virt = reinterpret_cast<void*>(to_higher_half(new_phys));  // NOLINT
     memset(new_virt, 0, PAGE_SIZE_4K);
 
     // Rebuild PTE flags from the existing mapping:
