@@ -83,16 +83,16 @@ class PageMap {
     static void create_new(PageMap* map);
 
     bool map(uintptr_t virt_addr, uintptr_t phys_addr, uint8_t flags, CacheType cache,
-             PageSize size, uint8_t pkey = 0);
+             PageSize size, uint8_t pkey = 0, bool do_flush = true);
 
-    bool map(uintptr_t virt_addr, uint8_t flags, CacheType cache, PageSize size);
+    bool map(uintptr_t virt_addr, uint8_t flags, CacheType cache, PageSize size, bool do_flush = true);
     void map_range(uintptr_t virt_start, uintptr_t phys_start, size_t length, uint8_t flags,
                    CacheType cache);
 
     void unmap(uintptr_t virt_addr, uint16_t owner_pcid = 0, bool free_phys = false);
     uintptr_t translate(uintptr_t virt_addr);
 
-    void load(uint16_t pcid = 0, bool preserve_tlb = false);
+    void load(uint16_t pcid = 0);
 
     uintptr_t get_root_phys() const {
         return this->phys_root_addr;
@@ -101,9 +101,11 @@ class PageMap {
    private:
     static PageMap* get_kernel_map();
     uintptr_t* get_pte(uintptr_t virt_addr, int target_level, bool allocate);
+    bool is_active() const;
 
     /// Physical address of the root page-table (CR3 value for this map).
     uintptr_t phys_root_addr;
+    bool is_dirty = false;
 };
 
 }  // namespace kernel::memory

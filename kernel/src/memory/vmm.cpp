@@ -169,7 +169,7 @@ void VirtualManager::init() {
     map_pagemap();
     map_kernel();
 
-    kernel_pagemap.load(0, true);
+    kernel_pagemap.load(0);
 
     // Reserve a large virtual region above all physical memory as the
     // kernel's "virtual heap" arena. Physical pages will be mapped here

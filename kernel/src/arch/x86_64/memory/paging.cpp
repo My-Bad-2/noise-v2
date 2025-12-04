@@ -1,5 +1,4 @@
 #include "memory/pagemap.hpp"
-#include <cstdint>
 #include "memory/memory.hpp"
 #include "memory/paging.hpp"
 #include "memory/pmm.hpp"
@@ -233,7 +232,7 @@ uintptr_t* PageMap::get_pte(uintptr_t virt_addr, int target_level, bool allocate
 }
 
 bool PageMap::map(uintptr_t virt_addr, uintptr_t phys_addr, uint8_t flags, CacheType cache,
-                  PageSize size, uint8_t pkey) {
+                  PageSize size, uint8_t pkey, bool do_flush) {
     int target_level = get_target_level(size);
     size_t mask      = 0;  // Alignment mask
 
@@ -267,12 +266,19 @@ bool PageMap::map(uintptr_t virt_addr, uintptr_t phys_addr, uint8_t flags, Cache
     entry |= (static_cast<uint64_t>(pkey & 0xF) << 59);
     *pte = entry;
 
-    TLB::flush(virt_addr);
+    if (this->is_active()) {
+        if (do_flush) {
+            TLB::flush(virt_addr);
+        }
+    } else {
+        this->is_dirty = true;
+    }
 
     return true;
 }
 
-bool PageMap::map(uintptr_t virt_addr, uint8_t flags, CacheType cache, PageSize size) {
+bool PageMap::map(uintptr_t virt_addr, uint8_t flags, CacheType cache, PageSize size,
+                  bool do_flush) {
     // This overload is responsible for owning new physical frames and
     // then delegating to the core mapping function. On failure it eagerly
     // frees the frame to avoid leaks.
@@ -310,7 +316,7 @@ bool PageMap::map(uintptr_t virt_addr, uint8_t flags, CacheType cache, PageSize 
         return false;
     }
 
-    if (!this->map(virt_addr, phys_addr, flags, cache, size)) {
+    if (!this->map(virt_addr, phys_addr, flags, cache, size, 0, do_flush)) {
         PhysicalManager::free(reinterpret_cast<void*>(phys_addr), frames_needed);
         return false;
     }
@@ -451,20 +457,23 @@ void PageMap::create_new(PageMap* map) {
     }
 
     map->phys_root_addr = reinterpret_cast<uintptr_t>(root_phys);
+    map->is_dirty       = true;
     LOG_DEBUG("PageMap::create_new root_phys=0x%lx kernel_initialized=%d", map->phys_root_addr,
               kernel_initialized);
 }
 
-void PageMap::load(uint16_t pcid, bool preserve_tlb) {
+void PageMap::load(uint16_t pcid) {
     arch::Cr3 cr3 = {};
     cr3.raw       = this->phys_root_addr;
 
     if (pcid_supported) {
         cr3.pcid_enabled.pcid = pcid & 0xFFF;
 
-        // Set bit 64 to prevent CPU from flushing a
-        // valid TLB for this PCID
-        if (preserve_tlb) {
+        if (this->is_dirty) {
+            this->is_dirty = false;
+        } else {
+            // Set bit 63 to prevent CPU from flushing a
+            // valid TLB for this PCID
             cr3.pcid_enabled.no_flush = true;
         }
     }
@@ -509,13 +518,25 @@ void PageMap::map_range(uintptr_t virt_start, uintptr_t phys_start, size_t lengt
         phys = align_down(phys, step);
         virt = align_up(virt, step);
 
-        if (!this->map(virt, phys, flags, cache, size)) {
+        if (!this->map(virt, phys, flags, cache, size, 0, false)) {
             PANIC("Failed to map range at virt: 0x%lx phys: 0x%lx", virt, phys);
         }
 
         virt += step;
         phys += step;
         remaining -= step;
+    }
+
+    // If range is huge, it's often faster to just reload the CR3 than to issue >512 `invlpg`
+    if (this->is_active()) {
+        if (length >= PAGE_SIZE_2M) {
+            this->load();
+        } else {
+            // Flush all addresses individually
+            for (uintptr_t v = virt_start; v < virt_start + length; v += PAGE_SIZE_4K) {
+                TLB::flush(v);
+            }
+        }
     }
 }
 
@@ -577,6 +598,15 @@ void PageMap::global_init() {
 
     LOG_INFO("Paging: initialized (levels=%d 1G=%d PCID=%d)", g_max_levels, support_1g_pages,
              pcid_supported);
+}
+
+bool PageMap::is_active() const {
+    arch::Cr3 cr3 = arch::Cr3::read();
+
+    uintptr_t curr_phys = cr3.raw & page_mask;
+    uintptr_t map_phys  = this->phys_root_addr & page_mask;
+
+    return curr_phys == map_phys;
 }
 }  // namespace kernel::memory
 // NOLINTEND(bugprone-easily-swappable-parameters)
