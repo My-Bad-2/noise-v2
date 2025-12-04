@@ -168,6 +168,7 @@ void VirtualManager::init() {
     // activate it via CR3; after this, all code runs in the "real" kernel VA.
     map_pagemap();
     map_kernel();
+    CowManager::init();
 
     kernel_pagemap.load(0);
 
@@ -181,15 +182,6 @@ void VirtualManager::init() {
     LOG_INFO("VMM: initializing virtual heap at 0x%lx size=0x%lx", virt_heap_start, virt_heap_size);
 
     virt_allocator.init(virt_heap_start, virt_heap_size);
-
-    // Sanity probe: allocate a small number of pages so that early bugs
-    // in the allocator are caught immediately during bring-up.
-    void* test = allocate(2);
-    if (!test) {
-        LOG_ERROR("VMM: initial virtual allocation probe failed");
-        PANIC("Virtual allocator self-test failed");
-    }
-    LOG_DEBUG("VMM: initial probe allocation at %p", test);
 }
 
 PageMap* PageMap::get_kernel_map() {
@@ -417,24 +409,41 @@ void* VirtualManager::allocate(size_t count, PageSize size, uint8_t flags, Cache
         return nullptr;
     }
 
-    uintptr_t curr_virt = virt_addr;
+    bool is_lazy = (flags & Lazy);
 
-    // Then back each page with physical memory via the kernel page map.
-    for (size_t i = 0; i < count; ++i) {
-        if (!kernel_pagemap.map(curr_virt, flags, cache, size)) {
-            // Roll back any mappings we already created.
-            for (size_t j = 0; j < i; ++j) {
-                uintptr_t addr = virt_addr + (j * step_bytes);
-                kernel_pagemap.unmap(addr, 0, true);
-            }
+    if (is_lazy) {
+        // We can't use 2MB/1GB pages for CoW because we only have a 4KB zero page.
+        // So, we map everything as 4KB pages
+        flags &= ~Write;
+        uintptr_t zero_page = CowManager::get_zero_page_phys();
+        size_t total_pages  = total_bytes / PAGE_SIZE_4K;
 
-            virt_allocator.free_region(virt_addr, total_bytes);
-
-            LOG_ERROR("VMM: failed to map page at 0x%lx (rolling back)", curr_virt);
-            return nullptr;
+        for (size_t i = 0; i < total_pages; ++i) {
+            kernel_pagemap.map(virt_addr + (i * PAGE_SIZE_4K), zero_page, flags, cache,
+                               PageSize::Size4K, 0, false);
         }
 
-        curr_virt += step_bytes;
+        kernel_pagemap.load();
+    } else {
+        uintptr_t curr_virt = virt_addr;
+
+        // Then back each page with physical memory via the kernel page map.
+        for (size_t i = 0; i < count; ++i) {
+            if (!kernel_pagemap.map(curr_virt, flags, cache, size)) {
+                // Roll back any mappings we already created.
+                for (size_t j = 0; j < i; ++j) {
+                    uintptr_t addr = virt_addr + (j * step_bytes);
+                    kernel_pagemap.unmap(addr, 0, true);
+                }
+
+                virt_allocator.free_region(virt_addr, total_bytes);
+
+                LOG_ERROR("VMM: failed to map page at 0x%lx (rolling back)", curr_virt);
+                return nullptr;
+            }
+
+            curr_virt += step_bytes;
+        }
     }
 
     LOG_DEBUG("VMM: allocate virt=0x%lx count=%zu size=%u", virt_addr, count,

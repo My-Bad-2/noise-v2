@@ -22,6 +22,7 @@ constexpr uint64_t FlagDirty        = 1ULL << 6;
 constexpr uint64_t FlagHuge         = 1ULL << 7;
 constexpr uint64_t FlagGlobal       = 1ULL << 8;
 constexpr uint64_t FlagNoExec       = 1ULL << 63;
+constexpr uint64_t FlagLazy         = 1ULL << 58;
 
 constexpr uint64_t FlagPAT  = 1ULL << 7;
 constexpr uint64_t FlagLPAT = 1ULL << 12;

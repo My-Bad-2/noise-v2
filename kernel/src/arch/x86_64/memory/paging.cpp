@@ -67,6 +67,10 @@ size_t convert_generic_flags(uint8_t flags, CacheType cache, PageSize size) {
         ret |= FlagNoExec;
     }
 
+    if(flags & Lazy) {
+        ret |= FlagLazy;
+    }
+
     if (size != PageSize::Size4K) {
         ret |= FlagHuge;
     }
@@ -89,6 +93,52 @@ size_t convert_generic_flags(uint8_t flags, CacheType cache, PageSize size) {
     }
 
     return ret;
+}
+
+std::pair<uint8_t, CacheType> convert_arch_flags(size_t flags, PageSize size) {
+    uint8_t flag = Execute;
+    {
+        if(flags & FlagPresent) {
+            flag |= Read;
+        }
+
+        if(flags & FlagWrite) {
+            flag |= Write;
+        }
+
+        if(flags & FlagUser) {
+            flag |= User;
+        }
+
+        if(flags & FlagGlobal) {
+            flag |= Global;
+        }
+
+        if(flags & FlagNoExec) {
+            flag &= ~Execute;
+        }
+    }
+
+    CacheType cache = CacheType::WriteBack;
+    {
+        bool is_pat = (size == PageSize::Size4K) ? (flags & FlagPAT) : (flags & FlagLPAT);
+        bool is_pcd = (flags & FlagCacheDisable);
+        bool is_pwt = (flags & FlagWriteThrough);
+
+        if(!is_pat && !is_pcd && !is_pwt) {
+            cache = CacheType::WriteBack;
+        } else if(!is_pat && !is_pcd && is_pwt) {
+            cache = CacheType::WriteThrough;
+        } else if(!is_pat && is_pcd && is_pwt) {
+            cache = CacheType::Uncached;
+        } else if(is_pat && !is_pcd && is_pwt) {
+            cache = CacheType::WriteCombining;
+        } else if(is_pat && !is_pcd && !is_pwt) {
+            cache = CacheType::WriteProtected;
+        }
+    }
+
+    return std::make_pair(flag, cache);
 }
 
 void init_pat() {
@@ -607,6 +657,34 @@ bool PageMap::is_active() const {
     uintptr_t map_phys  = this->phys_root_addr & page_mask;
 
     return curr_phys == map_phys;
+}
+
+std::pair<uint8_t, CacheType> PageMap::get_flags(uintptr_t virt_addr, PageSize size) {
+    int target_level = get_target_level(size);
+
+    uint64_t* pte = get_pte(virt_addr, target_level, false);
+
+    if((pte == nullptr) || (*pte & FlagPresent)) {
+        return std::make_pair(0, CacheType::WriteBack);
+    }
+
+    uint64_t entry = *pte;
+    size_t arch_flags = entry & ~page_mask;
+
+    return convert_arch_flags(arch_flags, size);
+}
+
+uint8_t PageMap::get_protection_key(uintptr_t virt_addr, PageSize size) {
+    int target_level = get_target_level(size);
+
+    uint64_t* pte = get_pte(virt_addr, target_level, false);
+
+    if((pte == nullptr) || (*pte & FlagPresent)) {
+        return 0;
+    }
+
+    uintptr_t entry = *pte;
+    return static_cast<uint8_t>((entry >> 59) & 0xF);
 }
 }  // namespace kernel::memory
 // NOLINTEND(bugprone-easily-swappable-parameters)

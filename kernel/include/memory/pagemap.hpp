@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <utility>
 #include "memory/memory.hpp"
 
 namespace kernel::memory {
@@ -34,6 +35,7 @@ enum PageFlags : uint8_t {
     User    = (1 << 2),
     Execute = (1 << 3),
     Global  = (1 << 4),
+    Lazy    = (1 << 5)
 };
 
 /**
@@ -85,7 +87,8 @@ class PageMap {
     bool map(uintptr_t virt_addr, uintptr_t phys_addr, uint8_t flags, CacheType cache,
              PageSize size, uint8_t pkey = 0, bool do_flush = true);
 
-    bool map(uintptr_t virt_addr, uint8_t flags, CacheType cache, PageSize size, bool do_flush = true);
+    bool map(uintptr_t virt_addr, uint8_t flags, CacheType cache, PageSize size,
+             bool do_flush = true);
     void map_range(uintptr_t virt_start, uintptr_t phys_start, size_t length, uint8_t flags,
                    CacheType cache);
 
@@ -97,6 +100,9 @@ class PageMap {
     uintptr_t get_root_phys() const {
         return this->phys_root_addr;
     }
+
+    std::pair<uint8_t, CacheType> get_flags(uintptr_t virt_addr, PageSize size = PageSize::Size4K);
+    uint8_t get_protection_key(uintptr_t virt_addr, PageSize size = PageSize::Size4K);
 
    private:
     static PageMap* get_kernel_map();

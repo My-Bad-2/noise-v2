@@ -36,9 +36,9 @@ namespace kernel::memory {
  *    acquired separately via `PageMap`/`PhysicalManager`.
  */
 struct VmFreeRegion {
-    uintptr_t start;      ///< Start of the free virtual range (inclusive).
-    size_t length;        ///< Length of the free range in bytes.
-    VmFreeRegion* next;   ///< Next region in the sorted free list.
+    uintptr_t start;     ///< Start of the free virtual range (inclusive).
+    size_t length;       ///< Length of the free range in bytes.
+    VmFreeRegion* next;  ///< Next region in the sorted free list.
 };
 
 /**
@@ -190,5 +190,16 @@ class VirtualManager {
      * is managed here.
      */
     static void* reserve_mmio(size_t size, size_t align);
+};
+
+class CowManager {
+   public:
+    static void init();
+    static uintptr_t get_zero_page_phys();
+    static bool is_zero_page(uintptr_t virt_addr, PageMap* map);
+    static bool handle_fault(uintptr_t virt_addr, PageMap* map);
+
+   private:
+    static uintptr_t zero_page_phys;
 };
 }  // namespace kernel::memory
