@@ -67,7 +67,7 @@ size_t convert_generic_flags(uint8_t flags, CacheType cache, PageSize size) {
         ret |= FlagNoExec;
     }
 
-    if(flags & Lazy) {
+    if (flags & Lazy) {
         ret |= FlagLazy;
     }
 
@@ -98,23 +98,23 @@ size_t convert_generic_flags(uint8_t flags, CacheType cache, PageSize size) {
 std::pair<uint8_t, CacheType> convert_arch_flags(size_t flags, PageSize size) {
     uint8_t flag = Execute;
     {
-        if(flags & FlagPresent) {
+        if (flags & FlagPresent) {
             flag |= Read;
         }
 
-        if(flags & FlagWrite) {
+        if (flags & FlagWrite) {
             flag |= Write;
         }
 
-        if(flags & FlagUser) {
+        if (flags & FlagUser) {
             flag |= User;
         }
 
-        if(flags & FlagGlobal) {
+        if (flags & FlagGlobal) {
             flag |= Global;
         }
 
-        if(flags & FlagNoExec) {
+        if (flags & FlagNoExec) {
             flag &= ~Execute;
         }
     }
@@ -125,15 +125,15 @@ std::pair<uint8_t, CacheType> convert_arch_flags(size_t flags, PageSize size) {
         bool is_pcd = (flags & FlagCacheDisable);
         bool is_pwt = (flags & FlagWriteThrough);
 
-        if(!is_pat && !is_pcd && !is_pwt) {
+        if (!is_pat && !is_pcd && !is_pwt) {
             cache = CacheType::WriteBack;
-        } else if(!is_pat && !is_pcd && is_pwt) {
+        } else if (!is_pat && !is_pcd && is_pwt) {
             cache = CacheType::WriteThrough;
-        } else if(!is_pat && is_pcd && is_pwt) {
+        } else if (!is_pat && is_pcd && is_pwt) {
             cache = CacheType::Uncached;
-        } else if(is_pat && !is_pcd && is_pwt) {
+        } else if (is_pat && !is_pcd && is_pwt) {
             cache = CacheType::WriteCombining;
-        } else if(is_pat && !is_pcd && !is_pwt) {
+        } else if (is_pat && !is_pcd && !is_pwt) {
             cache = CacheType::WriteProtected;
         }
     }
@@ -664,11 +664,11 @@ std::pair<uint8_t, CacheType> PageMap::get_flags(uintptr_t virt_addr, PageSize s
 
     uint64_t* pte = get_pte(virt_addr, target_level, false);
 
-    if((pte == nullptr) || (*pte & FlagPresent)) {
+    if ((pte == nullptr) || (*pte & FlagPresent)) {
         return std::make_pair(0, CacheType::WriteBack);
     }
 
-    uint64_t entry = *pte;
+    uint64_t entry    = *pte;
     size_t arch_flags = entry & ~page_mask;
 
     return convert_arch_flags(arch_flags, size);
@@ -679,7 +679,7 @@ uint8_t PageMap::get_protection_key(uintptr_t virt_addr, PageSize size) {
 
     uint64_t* pte = get_pte(virt_addr, target_level, false);
 
-    if((pte == nullptr) || (*pte & FlagPresent)) {
+    if ((pte == nullptr) || (*pte & FlagPresent)) {
         return 0;
     }
 

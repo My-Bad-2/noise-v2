@@ -29,9 +29,9 @@ This roadmap outlines the development stages for a 64-bit microkernel using the 
     - [X] Implement x86_64 4-Level Paging (PML4, PDP, PD, PT). Support LA57?
     - [X] Create `map` and `unmap` functions.
     - [X] Bootstrap the Kernel Page Table (Higher Half mapping).
-- [ ] **Kernel Heap**
-    - [ ] Implement a basic Slab Allocator or Linked List Allocator.
-    - [ ] Expose `kmalloc` and `kfree`.
+- [X] **Kernel Heap**
+    - [X] Implement a Heap Allocator.
+    - [X] Expose `kmalloc` and `kfree`.
 
 ## Phase 3: CPU & Interrupts
 *Goal: Handle hardware exceptions and hardware timers.*
@@ -74,7 +74,7 @@ This roadmap outlines the development stages for a 64-bit microkernel using the 
     - [ ] Craft the initial User Stack.
     - [ ] Execute `sysret` or `iretq` to jump to User Entry point.
 
-## Phase 6: User Space Services (The "Micro" part)
+## Phase 6: User Space Services
 *Goal: Move traditional kernel functions out of Ring 0.*
 
 - [ ] **Init Process**

@@ -79,9 +79,9 @@ bool KernelHeap::expand_heap(size_t size_needed) {
         // Fallback: if large pages fail (e.g. fragmentation), try 4 KiB
         // pages instead of immediately giving up.
         if (size > PageSize::Size4K) {
-            size        = PageSize::Size4K;
-            count       = div_roundup(total_req, PAGE_SIZE_4K);
-            alloc_bytes = count * static_cast<size_t>(size);
+            size         = PageSize::Size4K;
+            count        = div_roundup(total_req, PAGE_SIZE_4K);
+            alloc_bytes  = count * static_cast<size_t>(size);
             region_start = VirtualManager::allocate(count, size);
             if (!region_start) {
                 LOG_ERROR("KernelHeap: expand_heap failed (size_needed=%zu)", size_needed);
@@ -105,8 +105,8 @@ bool KernelHeap::expand_heap(size_t size_needed) {
 
     this->insert_free_node(new_block);
 
-    LOG_INFO("KernelHeap: expanded heap by %zu bytes (page_size=%zu, count=%zu)",
-             alloc_bytes, static_cast<size_t>(size), count);
+    LOG_INFO("KernelHeap: expanded heap by %zu bytes (page_size=%zu, count=%zu)", alloc_bytes,
+             static_cast<size_t>(size), count);
     return true;
 }
 
@@ -206,8 +206,8 @@ void* KernelHeap::alloc(size_t size) {
     // an allocated part and a new free block. The "+ 0x10" ensures that
     // the remainder is big enough to be useful (beyond header + min obj).
     if (best_fit->size > size + sizeof(BlockHeader) + 0x10) {
-        BlockHeader* new_block = reinterpret_cast<BlockHeader*>(
-            reinterpret_cast<char*>(best_fit) + sizeof(BlockHeader) + size);
+        BlockHeader* new_block = reinterpret_cast<BlockHeader*>(reinterpret_cast<char*>(best_fit) +
+                                                                sizeof(BlockHeader) + size);
 
         new_block->magic       = BLOCK_MAGIC;
         new_block->is_free     = true;
@@ -271,6 +271,44 @@ void kfree(void* ptr) {
 
 void* kmalloc(size_t size) {
     return kheap.alloc(size);
+}
+
+// NOLINTNEXTLINE
+void* aligned_kalloc(size_t size, size_t alignment) {
+    if (alignment == 0 || !is_aligned(alignment, alignment)) {
+        return nullptr;
+    }
+
+    size_t overhead = alignment + sizeof(void*);
+
+    if (size > SIZE_MAX - overhead) {
+        return nullptr;
+    }
+
+    void* raw_ptr = kheap.alloc(size + overhead);
+    if (!raw_ptr) {
+        return nullptr;
+    }
+
+    uintptr_t start_addr   = reinterpret_cast<uintptr_t>(raw_ptr) + sizeof(void*);
+    uintptr_t aligned_addr = align_up(start_addr, alignment);
+
+    void** stash_location = reinterpret_cast<void**>(aligned_addr - sizeof(void*));
+    *stash_location       = raw_ptr;
+
+    return reinterpret_cast<void*>(aligned_addr);
+}
+
+void aligned_kfree(void* ptr) {
+    if (!ptr) {
+        return;
+    }
+
+    uintptr_t addr        = reinterpret_cast<uintptr_t>(ptr);
+    void** stash_location = reinterpret_cast<void**>(addr - sizeof(void*));
+    void* raw_ptr         = *stash_location;
+
+    kheap.free(raw_ptr);
 }
 }  // namespace kernel::memory
 // NOLINTEND(performance-no-int-to-ptr)

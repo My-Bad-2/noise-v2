@@ -104,8 +104,9 @@ class PageMap {
     std::pair<uint8_t, CacheType> get_flags(uintptr_t virt_addr, PageSize size = PageSize::Size4K);
     uint8_t get_protection_key(uintptr_t virt_addr, PageSize size = PageSize::Size4K);
 
-   private:
     static PageMap* get_kernel_map();
+
+   private:
     uintptr_t* get_pte(uintptr_t virt_addr, int target_level, bool allocate);
     bool is_active() const;
 

@@ -124,5 +124,6 @@ class KernelHeap {
 /// Global helpers that route to the single kernel heap instance.
 void* kmalloc(size_t size);
 void kfree(void* ptr);
-
+void* aligned_kalloc(size_t size, size_t alignment);
+void aligned_kfree(void* ptr);
 }  // namespace kernel::memory

@@ -1,6 +1,7 @@
 #include "arch.hpp"
 #include "libs/log.hpp"
 #include "memory/memory.hpp"
+#include "hal/cpu.hpp"
 
 namespace kernel {
 namespace {
@@ -13,6 +14,7 @@ extern "C" void kmain() {
 
     arch::init();
     memory::init();
+    cpu::CPUCoreManager::init_core(0, 0);
 
     LOG_DEBUG("Hello, World!");
 

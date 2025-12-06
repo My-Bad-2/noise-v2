@@ -111,8 +111,8 @@ bool CowManager::handle_fault(uintptr_t virt_addr, PageMap* map) {
     flags |= Write;
     flags &= ~Lazy;
 
-    LOG_DEBUG("CoW: resolving fault at 0x%lx -> new_phys=0x%lx flags=0x%x pkey=%u",
-              virt_addr, new_phys, flags, pkey);
+    LOG_DEBUG("CoW: resolving fault at 0x%lx -> new_phys=0x%lx flags=0x%x pkey=%u", virt_addr,
+              new_phys, flags, pkey);
 
     // Remap the faulting VA to the new private frame.
     map->map(virt_addr, new_phys, flags, cache, PageSize::Size4K, pkey);
