@@ -36,13 +36,13 @@ This roadmap outlines the development stages for a 64-bit microkernel using the 
 ## Phase 3: CPU & Interrupts
 *Goal: Handle hardware exceptions and hardware timers.*
 
-- [ ] **Global Descriptor Table (GDT)**
-    - [ ] Construct GDT with Kernel/User Code & Data segments.
-    - [ ] Setup TSS (Task State Segment) for interrupt stack switching.
-- [ ] **Interrupt Descriptor Table (IDT)**
-    - [ ] Define IDT structure.
-    - [ ] Implement Assembly ISR stubs (Save/Restore registers).
-    - [ ] Handle Critical Exceptions (`#GP`, `#PF`, `#DF`).
+- [X] **Global Descriptor Table (GDT)**
+    - [X] Construct GDT with Kernel/User Code & Data segments.
+    - [X] Setup TSS (Task State Segment) for interrupt stack switching.
+- [X] **Interrupt Descriptor Table (IDT)**
+    - [X] Define IDT structure.
+    - [X] Implement Assembly ISR stubs (Save/Restore registers).
+    - [X] Handle Critical Exceptions (`#GP`, `#PF`, `#DF`).
 - [ ] **Hardware Interrupts**
     - [ ] Mask Legacy PIC (8259).
     - [ ] Initialize LAPIC (Local APIC) per core.

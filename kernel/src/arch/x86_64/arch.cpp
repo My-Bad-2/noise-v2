@@ -14,6 +14,7 @@
 #include "hal/uart.hpp"
 #include "cpu/idt.hpp"
 #include "hal/handlers/df.hpp"
+#include "hal/pic.hpp"
 
 namespace kernel::arch {
 namespace {
@@ -22,6 +23,7 @@ handlers::DFHandler df_handler;
 void initialize_interrupt_subsystem() {
     cpu::arch::IDTManager::setup_idt();
     cpu::arch::InterruptDispatcher::register_handler(EXCEPTION_DOUBLE_FAULT, &df_handler);
+    hal::LegacyPIC::remap();
 }
 }  // namespace
 
