@@ -1,4 +1,5 @@
 #include "arch.hpp"
+#include "hal/acpi.hpp"
 #include "libs/log.hpp"
 #include "memory/memory.hpp"
 #include "hal/cpu.hpp"
@@ -16,6 +17,7 @@ extern "C" void kmain() {
     memory::init();
     arch::init();
     cpu::CPUCoreManager::init_core(0, 0);
+    hal::ACPI::init();
     LOG_DEBUG("Hello, World!");
 
     arch::halt(true);

@@ -1,5 +1,6 @@
 #include "uacpi/kernel_api.h"
 #include "hal/io.hpp"
+#include "uacpi/status.h"
 
 using namespace kernel::hal;
 
@@ -41,3 +42,12 @@ uacpi_status uacpi_kernel_io_read32(uacpi_handle handle, uacpi_size offset, uacp
     *out_value        = in<uint32_t>(static_cast<uint16_t>(address));
     return UACPI_STATUS_OK;
 }
+
+// NOLINTNEXTLINE
+uacpi_status uacpi_kernel_io_map(uacpi_io_addr base, uacpi_size len, uacpi_handle* out_handle) {
+    // NOLINTNEXTLINE
+    *out_handle = reinterpret_cast<uacpi_handle>(base);
+    return UACPI_STATUS_OK;
+}
+
+void uacpi_kernel_io_unmap(uacpi_handle) {}
