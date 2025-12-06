@@ -8,17 +8,26 @@
  */
 
 #include "arch.hpp"
+#include "cpu/exception.hpp"
 #include "hal/interface/uart.hpp"
+#include "hal/interrupt.hpp"
 #include "hal/uart.hpp"
+#include "cpu/idt.hpp"
+#include "hal/handlers/df.hpp"
 
 namespace kernel::arch {
+namespace {
+handlers::DFHandler df_handler;
+
+void initialize_interrupt_subsystem() {
+    cpu::arch::IDTManager::setup_idt();
+    cpu::arch::InterruptDispatcher::register_handler(EXCEPTION_DOUBLE_FAULT, &df_handler);
+}
+}  // namespace
 
 void init() {
     // Architecture-specific initialization hook.
-    // Currently empty, but this is the place to:
-    //  - Initialize descriptor tables (GDT/IDT).
-    //  - Configure basic hardware needed before entering the main kernel.
-    //  - Set up early console, timers, etc.
+    initialize_interrupt_subsystem();
 }
 
 hal::IUART* get_kconsole() {
@@ -45,4 +54,16 @@ void pause() {
     asm volatile("pause");
 }
 
+void disable_interrupts() {
+    asm volatile("cli");
+}
+
+void enable_interrupts() {
+    asm volatile("sti");
+}
+
 }  // namespace kernel::arch
+
+extern "C" void exception_handler(kernel::cpu::arch::TrapFrame* frame) {
+    kernel::cpu::arch::InterruptDispatcher::dispatch(frame);
+}

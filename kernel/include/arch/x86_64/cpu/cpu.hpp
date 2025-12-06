@@ -27,7 +27,10 @@ struct alignas(CACHE_LINE_SIZE) CPUData {
 
     /// Initialize architectural state for a core before it starts running.
     static void init(CPUData* arch, uint64_t stack_top);
-    /// Commit the initialized state to hardware (load GDT/TSS/GS base).
-    static void commit_state(CPUData* cpu);
+    /// Commit the initialized state to hardware along with `PerCPUData`.
+    ///
+    /// `PerCPUData` is passed here so we can bind GS base and other CPU-local
+    /// registers to the owning per-CPU structure, not just the GDT/TSS block.
+    static void commit_state(PerCPUData* cpu);
 };
 }  // namespace kernel::cpu::arch

@@ -1,7 +1,6 @@
 #include "cpu/gdt.hpp"
-#include "cpu/registers.hpp"
-#include "cpu/regs.h"
-#include "hal/cpu.hpp"
+#include "cpu/cpu.hpp"
+#include "libs/log.hpp"
 #include <string.h>
 
 extern "C" void load_gdt_and_flush(kernel::cpu::arch::GDTR* gdtr);
@@ -22,6 +21,8 @@ extern "C" void load_gdt_and_flush(kernel::cpu::arch::GDTR* gdtr);
 
 namespace kernel::cpu::arch {
 void GDTManager::setup_gdt(CPUData* cpu) {
+    // Lambda encodes a flat GDT entry; centralizing the bit layout here
+    // keeps the rest of the code free from descriptor-level details.
     // NOLINTNEXTLINE
     auto encode_entry = [&](int idx, uint64_t base, uint64_t limit, uint8_t access, uint8_t flags) {
         cpu->gdt[idx].base_low    = (base & 0xFFFF);
@@ -31,6 +32,9 @@ void GDTManager::setup_gdt(CPUData* cpu) {
         cpu->gdt[idx].granularity = ((limit >> 16) & 0x0F) | (flags & 0xF0);
         cpu->gdt[idx].access      = access;
     };
+
+    // Build a minimal flat GDT: null, kernel code/data, user code/data,
+    // plus one TSS descriptor that points at the per-CPU TSS block.
 
     // 0: Null
     encode_entry(0, 0, 0, 0, 0);
@@ -79,34 +83,36 @@ void GDTManager::setup_tss(CPUData* cpu, uint64_t stack_top) {
     // Set Ring 0 Stack (Used when interrupt moves Ring 3 -> Ring 0)
     block.header.rsp0 = stack_top;
 
+    // Deny access to all ports by default; explicit calls to set_io_perm
+    // grant access where needed.
     memset(block.iopb, 0xFF, IOPB_SIZE);
     block.terminator = 0xFF;
 }
 
 void GDTManager::load_tables(CPUData* cpu) {
-    // dump_gdt(cpu);
     GDTR gdtr  = {};
     gdtr.base  = reinterpret_cast<uint64_t>(cpu->gdt);
     gdtr.limit = sizeof(cpu->gdt) - 1;
 
+    // Install per-CPU GDT and reload segment registers in asm stub.
     load_gdt_and_flush(&gdtr);
 
     // Index 5 * 8 = 0x28
     asm volatile("mov $0x28, %%ax; ltr %%ax" ::: "ax");
 
-    uint64_t gs_base = reinterpret_cast<uint64_t>(cpu);
-
-    kernel::arch::Msr msr;
-    msr.index = MSR_GS_BASE;
-    msr.value = gs_base;
-    msr.write();
+    LOG_INFO("GDT: loaded per-CPU tables gdt=0x%lx tss=0x%lx",
+             gdtr.base, reinterpret_cast<uint64_t>(&cpu->tss_block));
 }
 
 void GDTManager::set_io_perm(arch::CPUData* arch, uint16_t port, bool enable) {
+    // Flip the corresponding bit in the per-CPU I/O bitmap. This lets
+    // us selectively grant user-space access to legacy ports.
     if (enable) {
         arch->tss_block.iopb[port / 8] &= ~(1 << (port % 8));
     } else {
         arch->tss_block.iopb[port / 8] |= (1 << (port % 8));
     }
+
+    LOG_DEBUG("GDT: I/O perm %s port=0x%x", enable ? "allow" : "deny", port);
 }
 }  // namespace kernel::cpu::arch

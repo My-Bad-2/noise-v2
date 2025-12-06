@@ -61,4 +61,6 @@ hal::IUART* get_kconsole();
  */
 void pause();
 
+void disable_interrupts();
+void enable_interrupts();
 }  // namespace kernel::arch

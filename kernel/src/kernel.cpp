@@ -12,10 +12,9 @@ extern "C" void kmain() {
     kconsole = arch::get_kconsole();
     kconsole->init(115200);
 
-    arch::init();
     memory::init();
+    arch::init();
     cpu::CPUCoreManager::init_core(0, 0);
-
     LOG_DEBUG("Hello, World!");
 
     arch::halt(true);

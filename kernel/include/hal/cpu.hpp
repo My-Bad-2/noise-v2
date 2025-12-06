@@ -56,5 +56,14 @@ class CPUCoreManager {
      * Relies on `GS.base` pointing at the active `PerCPUData`.
      */
     static uint32_t get_curr_cpu_id();
+
+    /**
+     * @brief Get a pointer to the current CPU's `PerCPUData`.
+     *
+     * This is a convenience wrapper that uses `GS.base` to locate the
+     * active per‑CPU structure and is typically used by low-level code
+     * that needs CPU-local state (scheduler, interrupt handlers).
+     */
+    static PerCPUData* get_curr_cpu();
 };
 }  // namespace kernel::cpu

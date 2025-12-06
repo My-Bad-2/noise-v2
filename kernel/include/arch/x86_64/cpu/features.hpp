@@ -14,9 +14,6 @@
 
 #pragma once
 
-#include <cstdint>
-#include <cstddef>
-
 #define FEATURE_SSE3                0x1, 2, 0
 #define FEATURE_MON                 0x1, 2, 3
 #define FEATURE_VMX                 0x1, 2, 5
