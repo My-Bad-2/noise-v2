@@ -49,6 +49,7 @@ include(cmake/deps/Limine.cmake)
 include(cmake/deps/Ovmf.cmake)
 include(cmake/deps/Klibc.cmake)
 include(cmake/deps/FreestndCxxHdrs.cmake)
+include(cmake/deps/Uacpi.cmake)
 
 include(cmake/analyze/ClangTidy.cmake)
 include(cmake/format/ClangFormat.cmake)
@@ -62,6 +63,8 @@ if(${PROJECT_NAME}_USE_LLVM_LIBC)
 endif()
 
 message(STATUS "Freestnd hdrs at ${FREESTND_HDRS_DIR}")
+
+include(${uacpi_SOURCE_DIR}/uacpi.cmake)
 
 # add_subdirectory(klibc)
 add_subdirectory(kernel)

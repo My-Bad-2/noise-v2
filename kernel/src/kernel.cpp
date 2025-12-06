@@ -2,6 +2,7 @@
 #include "libs/log.hpp"
 #include "memory/memory.hpp"
 #include "hal/cpu.hpp"
+#include "boot/boot.h"
 
 namespace kernel {
 namespace {

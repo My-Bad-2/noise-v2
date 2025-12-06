@@ -10,6 +10,7 @@ set(
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/arch/${${PROJECT_NAME}_ARCHITECTURE}"
     ${FREESTND_HDRS_DIR}
+    ${UACPI_INCLUDES}
 )
 
 collect_sources_filtered(
@@ -20,7 +21,7 @@ collect_sources_filtered(
     DEBUG OFF
 )
 
-add_executable(kernel ${KERNEL_SOURCES})
+add_executable(kernel ${KERNEL_SOURCES} ${UACPI_SOURCES})
 
 set_target_properties(kernel PROPERTIES OUTPUT_NAME "${PROJECT_NAME}.elf")
 
