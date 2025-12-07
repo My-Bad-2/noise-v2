@@ -1,5 +1,4 @@
 #include "cpu/registers.hpp"
-#include "libs/log.hpp"
 
 namespace kernel::arch {
 Cr0 Cr0::read() {
@@ -59,9 +58,7 @@ Msr Msr::read(uint32_t index) {
     msr.index = index;
     msr.value = (static_cast<uint64_t>(high) << 32) | low;
 
-    // MSR reads are rare and usually configuration-related, so a debug
-    // log can be helpful when bring-up goes wrong.
-    LOG_DEBUG("MSR read index=0x%x value=0x%lx", index, msr.value);
+    // LOG_DEBUG("MSR read index=0x%x value=0x%lx", index, msr.value);
     return msr;
 }
 
@@ -69,8 +66,7 @@ void Msr::write() {
     uint32_t low  = this->value & 0xFFFFFFFF;
     uint32_t high = this->value >> 32;
 
-    // Mirror of rdmsr: configuration changes are funneled through here.
-    LOG_DEBUG("MSR write index=0x%x value=0x%lx", this->index, this->value);
+    // LOG_DEBUG("MSR write index=0x%x value=0x%lx", this->index, this->value);
     asm volatile("wrmsr" ::"c"(this->index), "a"(low), "d"(high));
 }
 }  // namespace kernel::arch

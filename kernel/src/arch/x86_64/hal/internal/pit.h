@@ -1,5 +1,13 @@
 #pragma once
 
+/**
+ * @brief Internal constants for the 8253/8254 PIT.
+ *
+ * These raw port and command bit definitions are only used by the PIT
+ * implementation; callers should use `hal::PIT` instead of relying on
+ * these magic numbers.
+ */
+
 #define BASE_FREQUENCY_HZ 1193182
 
 // IO Ports

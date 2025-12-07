@@ -46,21 +46,6 @@ void PIT::prepare_wait(uint16_t ms) {
     uint8_t cmd    = CMD_CHANNEL2 | CMD_ACCESS_LH | CMD_MODE0;
 
     out<uint8_t>(PORT_COMMAND, cmd);
-    // io_wait();
-
-    // out<uint8_t>(PORT_COMMAND, static_cast<uint8_t>(count & 0xFF));
-    // io_wait();
-
-    // out<uint8_t>(PORT_COMMAND, static_cast<uint8_t>((count >> 8) & 0xFF));
-    // io_wait();
-
-    // uint8_t ctrl = in<uint8_t>(PORT_GATE_CTRL);
-    // out<uint8_t>(PORT_GATE_CTRL, (ctrl & 0xFD) | 0x01);
-    // io_wait();
-
-    // while(check_expiration()) {
-    //     asm volatile("pause");
-    // }
 
     out<uint8_t>(PORT_CHANNEL2, 0xFF);
     out<uint8_t>(PORT_CHANNEL2, 0xFF);

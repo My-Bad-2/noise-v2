@@ -183,20 +183,25 @@ void Lapic::calibrate() {
     // ECX = Crystal Clock in Hz
     // EAX = Denominator
     // EBX = Numerator
-    if(eax != 0 && ecx != 0) {
+    if (eax != 0 && ecx != 0) {
         // Core Frequency = (Crystal Frequency * Numerator) / Denominator
         uint64_t core_freq_hz = static_cast<uint64_t>(ecx * ebx) / eax;
         
-        tsc_per_ms = core_freq_hz / 1000;
+        tsc_per_ms   = core_freq_hz / 1000;
         ticks_per_ms = ecx / 1000;
         ticks_per_us = ticks_per_ms / 1000;
 
-        if(ticks_per_us > 0) {
+        if (ticks_per_us > 0) {
             is_calibrated = true;
+            LOG_INFO("LAPIC: calibrated from CPUID (ticks_per_ms=%u ticks_per_us=%u tsc_per_ms=%lu)",
+                     ticks_per_ms, ticks_per_us, tsc_per_ms);
             return;
         }
     }
 
+    // If modern CPUID-based calibration is not available or insufficient,
+    // fall back to using the PIT as an external time reference for a
+    // classic 10ms measurement window.
     bool int_enabled = false;
 
     if (arch::interrupt_status()) {
@@ -204,6 +209,7 @@ void Lapic::calibrate() {
         arch::disable_interrupts();
     }
 
+    constexpr uint16_t TARGET_PIT_TICKS = 11932;
     constexpr uint32_t CALIBRATION_MS = 10;
     PIT::prepare_wait(CALIBRATION_MS);
 
@@ -215,16 +221,18 @@ void Lapic::calibrate() {
     asm volatile("lfence");
     size_t tsc_start = rdtsc();
 
-    volatile uint64_t safety_timeout = 100000000;
+    uint16_t pit_start = PIT::read_count();
 
-    while (!PIT::check_expiration()) {
-        asm volatile("pause");
-        safety_timeout--;
+    while(true) {
+        uint16_t pit_now = PIT::read_count();
 
-        if(safety_timeout == 0) {
-            // PIT is broken
-            break;
+        uint16_t delta = pit_start - pit_now;
+
+        if(delta >= TARGET_PIT_TICKS) {
+            break; // 10 ms passed!
         }
+
+        asm volatile("pause");
     }
 
     asm volatile("lfence");
