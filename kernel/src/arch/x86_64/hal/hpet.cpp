@@ -18,7 +18,9 @@ void HPET::write(size_t reg, size_t val) {
     if (!hpet_base.ptr()) {
         return;
     }
-    
+
+    // HPET registers are naturally aligned 64-bit locations; the caller
+    // passes byte offsets, so we index directly in bytes here.
     hpet_base.write(reg, val);
 }
 
@@ -70,6 +72,7 @@ void HPET::init() {
     uint16_t vendor_id = (caps >> 16) & 0xFFFF;
     period_fs          = caps >> 32;
 
+    // Vendor ID check helps detect uninitialized/invalid HPET blocks.
     if (vendor_id == 0 || vendor_id == 0xFFFF) {
         available = false;
         LOG_WARN("HPET: invalid vendor id=0x%x", vendor_id);
@@ -95,10 +98,12 @@ void HPET::init() {
 
     if (!(cfg_check & HPET_CFG_ENABLE)) {
         available = false;
-        LOG_WARN("HPET: Could not enabled! Config readback: 0x%lx", cfg_check);
+        LOG_WARN("HPET: could not enable! Config readback: 0x%lx", cfg_check);
         return;
     }
 
+    // Verify that the main counter is actually ticking; some broken
+    // firmware may expose a "dead" HPET block.
     uint64_t start_value = read(HPET_COUNTER_REG);
     int timeout          = 10000;
 
@@ -107,7 +112,7 @@ void HPET::init() {
         timeout--;
         if (timeout == 0) {
             available = false;
-            LOG_WARN("HPET: Counter stuck at 0x%lx", start_value);
+            LOG_WARN("HPET: counter stuck at 0x%lx", start_value);
             return;
         }
     }
@@ -142,10 +147,14 @@ void HPET::ndelay(size_t ns) {
     }
 
     size_t start                = read_counter();
-    unsigned __int128 target_fs = static_cast<unsigned __int128>(ns) * period_fs;
-    size_t ticks_needed         = static_cast<size_t>(target_fs / period_fs);
+    unsigned __int128 total_fs  = static_cast<unsigned __int128>(ns) * 1000000;  // ns -> fs
+    size_t ticks_needed         = static_cast<size_t>(total_fs / period_fs);
+    size_t target               = start + ticks_needed;
 
-    while (read_counter() < ticks_needed) {
+    // Busy-wait until the main counter reaches the target. We compare
+    // against `target` rather than just `ticks_needed` to handle the
+    // case where the counter is already non-zero when we start.
+    while (read_counter() < target) {
         arch::pause();
     }
 }

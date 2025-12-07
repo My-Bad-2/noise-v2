@@ -17,6 +17,7 @@
 #include "hal/pic.hpp"
 #include "hal/pit.hpp"
 #include "hal/hpet.hpp"
+#include "hal/ioapic.hpp"
 
 namespace kernel::arch {
 namespace {
@@ -26,6 +27,9 @@ void initialize_interrupt_subsystem() {
     cpu::arch::IDTManager::setup_idt();
     cpu::arch::InterruptDispatcher::register_handler(EXCEPTION_DOUBLE_FAULT, &df_handler);
     hal::LegacyPIC::remap();
+    hal::IOAPIC::init();
+    hal::IOAPIC::route_legacy_irq(1, 33, 0);
+    hal::IOAPIC::route_legacy_irq(0, 32, 0);
 }
 }  // namespace
 

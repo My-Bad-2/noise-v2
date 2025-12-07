@@ -12,6 +12,11 @@ namespace kernel::hal {
  *  - Exposes a monotonic counter in (approximate) nanoseconds.
  *  - Provides helpers for one-shot and periodic timers.
  *
+ * Why:
+ *  - Gives the kernel a shared, high-quality time base that is not tied
+ *    to any one CPU core, unlike LAPIC timers.
+ *  - Allows flexible interrupt routing via per-timer comparators.
+ *
  * It is intended as an optional, higher-quality time source; systems
  * without HPET simply report `is_available() == false`.
  */
@@ -71,6 +76,9 @@ class HPET {
      *
      * Arms timer @p timer_idx to fire once after @p us_delay microseconds
      * on @p irq_gsi. Returns false if HPET or the timer index is invalid.
+     *
+     * One-shot mode is typically used for timeouts or deferred work that
+     * does not need a regular cadence.
      */
     static bool enable_oneshot_timer(uint8_t timer_idx, size_t us_delay, uint8_t irq_gsi);
 

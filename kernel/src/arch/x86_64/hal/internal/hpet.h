@@ -1,5 +1,14 @@
 #pragma once
 
+/**
+ * @brief Internal HPET register offsets and bit definitions.
+ *
+ * This header reflects the architectural layout of HPET general and
+ * timer registers. It is intentionally separate from the C++ HPET
+ * wrapper so the high-level code does not need to depend on raw
+ * numeric offsets.
+ */
+
 // General Registers (0x00 - 0xF0)
 #define HPET_CAPS_ID_REG    0x00  // General Capabilities & ID
 #define HPET_CONFIG_REG     0x10  // General Configuration
