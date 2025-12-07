@@ -1,3 +1,5 @@
+#pragma once
+
 #include "uacpi/acpi.h"
 
 namespace kernel::hal {
@@ -10,6 +12,8 @@ namespace kernel::hal {
 struct LapicInfo {
     LapicInfo* next;
     acpi_madt_lapic lapic;
+
+    static LapicInfo* head();
 };
 
 /**
@@ -21,6 +25,8 @@ struct LapicInfo {
 struct IoApicInfo {
     IoApicInfo* next;
     acpi_madt_ioapic ioapic;
+
+    static IoApicInfo* head();
 };
 
 /**
@@ -33,6 +39,8 @@ struct IoApicInfo {
 struct IsoInfo {
     IsoInfo* next;
     acpi_madt_interrupt_source_override iso;
+
+    static IsoInfo* head();
 };
 
 /**
@@ -44,5 +52,7 @@ struct IsoInfo {
 struct X2ApicInfo {
     X2ApicInfo* next;
     acpi_madt_x2apic x2apic;
+
+    static X2ApicInfo* head();
 };
 }  // namespace kernel::hal

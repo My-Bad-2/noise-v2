@@ -5,6 +5,7 @@
 #include "cpu/idt.hpp"
 #include "cpu/registers.hpp"
 #include "cpu/regs.h"
+#include "hal/lapic.hpp"
 
 #define STACK_SIZE 0x2000
 
@@ -50,6 +51,8 @@ void arch::CPUData::init(CPUData* arch, uint64_t stack_top) {
 
     GDTManager::setup_gdt(arch);
     GDTManager::setup_tss(arch, stack_top);
+
+    hal::Lapic::init();
 }
 
 void arch::CPUData::commit_state(PerCPUData* cpu) {

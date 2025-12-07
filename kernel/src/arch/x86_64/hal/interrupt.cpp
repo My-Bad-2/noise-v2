@@ -3,14 +3,21 @@
 #include "hal/cpu.hpp"
 #include "hal/interface/interrupt.hpp"
 #include "libs/log.hpp"
+#include "hal/lapic.hpp"
 
 namespace kernel::cpu::arch {
 IInterruptHandler* InterruptDispatcher::handlers[256] = {nullptr};
 
 void InterruptDispatcher::register_handler(uint8_t vector, IInterruptHandler* handler) {
     handlers[vector] = handler;
-    LOG_INFO("IDT: registered handler '%s' for vector %u",
-             handler ? handler->name() : "<null>", vector);
+    LOG_INFO("IDT: registered handler '%s' for vector %u", handler ? handler->name() : "<null>",
+             vector);
+}
+
+void InterruptDispatcher::unregister_handler(uint8_t vector) {
+    LOG_INFO("IDT: unregistered handler '%s' for vector %u",
+             handlers[vector] ? handlers[vector]->name() : "<null>", vector);
+    handlers[vector] = nullptr;
 }
 
 void InterruptDispatcher::dispatch(TrapFrame* frame) {
@@ -31,15 +38,14 @@ void InterruptDispatcher::dispatch(TrapFrame* frame) {
     }
 
     if (vector >= 32) {
-        // send eoi
-        // TODO: Wire this to the local APIC / PIC when those components exist.
+        hal::Lapic::send_eoi();
     }
 }
 
 void InterruptDispatcher::default_handler(TrapFrame* frame, uint32_t cpu_id) {
     if (frame->vector < 32) {
-        PANIC("[CPU %d] FATAL EXCEPTION: Vector %lu Error %lu",
-              cpu_id, frame->vector, frame->error_code);
+        PANIC("[CPU %d] FATAL EXCEPTION: Vector %lu Error %lu", cpu_id, frame->vector,
+              frame->error_code);
     } else {
         LOG_WARN("[CPU %d] Unhandled interrupt: Vector %lu", cpu_id, frame->vector);
     }

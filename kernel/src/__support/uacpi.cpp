@@ -10,7 +10,6 @@
 #include "memory/pagemap.hpp"
 #include "libs/math.hpp"
 #include "libs/spinlock.hpp"
-#include "hal/interface/interrupt.hpp"
 
 using namespace kernel::memory;
 
@@ -48,8 +47,8 @@ void* uacpi_kernel_map(uacpi_phys_addr addr, uacpi_size len) {
     uint8_t flags   = Read | Write | Global;
 
     for (size_t i = 0; i < total_size; i += PAGE_SIZE_4K) {
-        if (!PageMap::get_kernel_map()->map(reinterpret_cast<uintptr_t>(vmm_base_virt_addr),
-                                            aligned_addr, flags, cache, PageSize::Size4K)) {
+        if (!PageMap::get_kernel_map()->map(reinterpret_cast<uintptr_t>(vmm_base_virt_addr) + i,
+                                            aligned_addr + i, flags, cache, PageSize::Size4K)) {
             PANIC("Failed to Map UACPI address 0x%lx -> %p", aligned_addr, vmm_base_virt_addr);
         }
     }
@@ -71,7 +70,7 @@ void uacpi_kernel_unmap(void* addr, uacpi_size len) {
     uacpi_size total_size   = len + offset;
 
     for (size_t i = 0; i < total_size; i += PAGE_SIZE_4K) {
-        PageMap::get_kernel_map()->unmap(virt_addr);
+        PageMap::get_kernel_map()->unmap(virt_addr + i);
     }
 }
 
@@ -79,13 +78,17 @@ void uacpi_kernel_log(uacpi_log_level lvl, const uacpi_char* fmt) {
     switch (lvl) {
         case UACPI_LOG_ERROR:
             LOG_ERROR(fmt);
+            break;
         case UACPI_LOG_WARN:
             LOG_WARN(fmt);
+            break;
         case UACPI_LOG_INFO:
         case UACPI_LOG_TRACE:
             LOG_INFO(fmt);
+            break;
         case UACPI_LOG_DEBUG:
             LOG_DEBUG(fmt);
+            break;
     }
 }
 
@@ -191,27 +194,17 @@ uacpi_status uacpi_kernel_wait_for_work_completion() {
     return UACPI_STATUS_UNIMPLEMENTED;
 }
 
-uacpi_status uacpi_kernel_schedule_work(uacpi_work_type, uacpi_work_handler, uacpi_handle ctx) {
+uacpi_status uacpi_kernel_schedule_work(uacpi_work_type, uacpi_work_handler, uacpi_handle) {
     return UACPI_STATUS_UNIMPLEMENTED;
 }
 
-uacpi_status uacpi_kernel_pci_device_open(uacpi_pci_address address, uacpi_handle* out_handle) {
+uacpi_status uacpi_kernel_pci_device_open(uacpi_pci_address, uacpi_handle*) {
     return UACPI_STATUS_UNIMPLEMENTED;
 }
 
 void uacpi_kernel_pci_device_close(uacpi_handle) {}
 
 void uacpi_kernel_signal_event(uacpi_handle) {}
-
-uacpi_status uacpi_kernel_install_interrupt_handler(uacpi_u32 irq, uacpi_interrupt_handler,
-                                                    uacpi_handle ctx,
-                                                    uacpi_handle* out_irq_handle) {
-    return UACPI_STATUS_UNIMPLEMENTED;
-}
-
-uacpi_status uacpi_kernel_uninstall_interrupt_handler(uacpi_interrupt_handler, uacpi_handle irq_handle) {
-    return UACPI_STATUS_UNIMPLEMENTED;
-}
 
 void uacpi_kernel_reset_event(uacpi_handle) {}
 

@@ -447,7 +447,7 @@ void* VirtualManager::allocate(size_t count, PageSize size, uint8_t flags, Cache
     return reinterpret_cast<void*>(virt_addr);
 }
 
-void VirtualManager::free(void* ptr, size_t count, PageSize size) {
+void VirtualManager::free(void* ptr, size_t count, PageSize size, bool free_phys) {
     uintptr_t virt_addr = reinterpret_cast<uintptr_t>(ptr);
     size_t step_bytes   = 0;
 
@@ -468,7 +468,7 @@ void VirtualManager::free(void* ptr, size_t count, PageSize size) {
     // Tear down mappings and free backing physical pages.
     for (size_t i = 0; i < count; ++i) {
         uintptr_t addr = virt_addr + (i * step_bytes);
-        kernel_pagemap.unmap(addr, 0, true);
+        kernel_pagemap.unmap(addr, 0, free_phys);
     }
 
     // Return the virtual range to the allocator for reuse.

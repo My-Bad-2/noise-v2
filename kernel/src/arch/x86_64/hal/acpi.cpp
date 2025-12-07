@@ -127,5 +127,21 @@ void ACPI::parse_tables() {
 
     LOG_INFO("ACPI: MADT parse complete (lapic/ioapic/iso/x2apic lists built)");
 }
+
+LapicInfo* LapicInfo::head() {
+    return lapic_list;
+}
+
+IoApicInfo* IoApicInfo::head() {
+    return ioapic_list;
+}
+
+IsoInfo* IsoInfo::head() {
+    return iso_list;
+}
+
+X2ApicInfo* X2ApicInfo::head() {
+    return x2apic_list;
+}
 }  // namespace kernel::hal
 // NOLINTEND(performance-no-int-to-ptr)

@@ -1,0 +1,45 @@
+#pragma once
+
+#include "hal/mmio.hpp"
+
+namespace kernel::hal {
+enum TimerMode : uint8_t {
+    OneShort,
+    Periodic,
+    TSCDeadline,
+};
+
+class Lapic {
+   public:
+    static void init();
+
+    static uint32_t get_id();
+    static void send_eoi();
+
+    static void send_ipi(uint32_t dest_id, uint8_t vector);
+    static void send_init_sipi(uint32_t dest_id, uint8_t page);
+    static void broadcast_ipi(uint8_t vector);
+
+    static void configure_timer(uint8_t vector, TimerMode mode);
+    static void start_timer_legacy(uint32_t count);
+    static void arm_ts_deadline(uint64_t target_tsc);
+    static void stop_timer();
+
+    static void calibrate(uint32_t measured_ticks);
+    static void udelay(uint32_t us);
+    static void mdelay(uint32_t ms);
+
+   private:
+    static uint32_t read(uint32_t offset);
+    static void write(uint32_t offset, uint32_t value);
+
+    static MMIORegion lapic_base;
+
+    static bool x2apic_active;
+    static bool tsc_deadline_supported;
+    static bool is_calibrated;
+
+    static uint32_t ticks_per_ms;
+    static uint32_t ticks_per_us;
+};
+}  // namespace kernel::hal

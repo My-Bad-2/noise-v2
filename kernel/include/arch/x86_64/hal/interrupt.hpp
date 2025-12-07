@@ -20,6 +20,8 @@ class InterruptDispatcher {
    public:
     /// Register a handler for a specific interrupt/exception vector.
     static void register_handler(uint8_t vector, IInterruptHandler* handler);
+
+    static void unregister_handler(uint8_t vector);
     
     /// Dispatch an interrupt to the appropriate handler based on vector.
     static void dispatch(TrapFrame* frame);
