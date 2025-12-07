@@ -70,8 +70,15 @@ class IOAPIC {
 
     /// Mask (disable) a given GSI at the IOAPIC level.
     static void mask_gsi(uint32_t gsi);
+
     /// Unmask (enable) a given GSI at the IOAPIC level.
     static void unmask_gsi(uint32_t gsi);
+
+    /// Mask (disable) a legacy IRQ at the IOAPIC level.
+    static void mask_legacy_irq(uint8_t irq);
+
+    /// Unmask (enable) a legacy IRQ at the IOAPIC level.
+    static void unmask_legacy_irq(uint8_t irq);
 
    private:
     static uint32_t read(int controller_idx, uint32_t reg);
@@ -83,7 +90,7 @@ class IOAPIC {
     static IsoInfo* find_iso(uint8_t irq);
 
     struct Controller {
-        uint8_t id;          ///< IOAPIC hardware ID for diagnostics.
+        uint8_t id;  ///< IOAPIC hardware ID for diagnostics.
         MMIORegion virt_base;
         uint32_t gsi_start;  ///< First GSI handled by this IOAPIC.
         uint32_t gsi_end;    ///< Last GSI handled by this IOAPIC.

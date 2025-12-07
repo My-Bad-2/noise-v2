@@ -176,4 +176,26 @@ void IOAPIC::unmask_gsi(uint32_t gsi) {
     write(idx, reg_low, val);
     LOG_DEBUG("IOAPIC: unmasked GSI %u (ctrl=%d pin=%u)", gsi, idx, pin);
 }
+
+void IOAPIC::mask_legacy_irq(uint8_t irq) {
+    uint32_t gsi = irq;
+
+    IsoInfo* iso = find_iso(irq);
+    if (iso) {
+        gsi = iso->iso.gsi;
+    }
+
+    mask_gsi(gsi);
+}
+
+void IOAPIC::unmask_legacy_irq(uint8_t irq) {
+    uint32_t gsi = irq;
+
+    IsoInfo* iso = find_iso(irq);
+    if (iso) {
+        gsi = iso->iso.gsi;
+    }
+
+    unmask_gsi(gsi);
+}
 }  // namespace kernel::hal
