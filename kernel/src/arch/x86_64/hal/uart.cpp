@@ -17,6 +17,7 @@
 #include "hal/uart.hpp"
 #include "hal/io.hpp"
 #include "internal/uart.h"
+#include "arch.hpp"
 
 namespace kernel::hal {
 
@@ -43,16 +44,18 @@ bool UART16550::is_data_ready() {
 void UART16550::send_char(char c) {
     // Busy-wait until the transmitter can accept a new byte.
     while (!this->is_tx_ready()) {
-        // Spin wait; upper layers should avoid excessive bursts here.
+        arch::pause();
     }
+
     this->write(DATA, static_cast<uint8_t>(c));
 }
 
 char UART16550::recieve_char() {
     // Busy-wait until at least one byte is available to read.
     while (!this->is_data_ready()) {
-        // Spin wait.
+        arch::pause();
     }
+
     return static_cast<char>(this->read(DATA));
 }
 

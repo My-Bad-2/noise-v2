@@ -16,13 +16,12 @@
 #define PAT_TYPE_WB  0x06ULL  // Write-Back
 #define PAT_TYPE_UC_ 0x07ULL  // Uncached (Weak)
 
-// Don't tell me what affects performance and what doesn't
 // NOLINTBEGIN(performance-no-int-to-ptr)
 // NOLINTBEGIN(bugprone-easily-swappable-parameters)
 namespace kernel::memory {
 bool TLB::has_invpcid = false;
 namespace {
-int g_max_levels      = 4;
+int max_levels        = 4;
 bool support_1g_pages = false;
 bool support_nx       = false;
 bool pcid_supported   = false;
@@ -232,7 +231,7 @@ void TLB::flush_all() {
 uintptr_t* PageMap::get_pte(uintptr_t virt_addr, int target_level, bool allocate) {
     uintptr_t curr_table_phys = this->phys_root_addr;
 
-    for (int level = g_max_levels; level > target_level; --level) {
+    for (int level = max_levels; level > target_level; --level) {
         uintptr_t* table_virt = reinterpret_cast<uintptr_t*>(to_higher_half(curr_table_phys));
 
         int shift = 12 + (level - 1) * 9;
@@ -305,7 +304,7 @@ bool PageMap::map(uintptr_t virt_addr, uintptr_t phys_addr, uint8_t flags, Cache
     }
 
     uintptr_t* pte = get_pte(virt_addr, target_level, true);
-    if (pte == nullptr) {
+    if (!pte) {
         return false;
     }
 
@@ -376,7 +375,7 @@ bool PageMap::map(uintptr_t virt_addr, uint8_t flags, CacheType cache, PageSize 
 
 void PageMap::unmap(uintptr_t virt_addr, uint16_t owner_pcid, bool free_phys) {
     uint64_t curr_tbl_phys = this->phys_root_addr;
-    int level              = g_max_levels;
+    int level              = max_levels;
 
     while (level >= 1) {
         uintptr_t* table_virt = reinterpret_cast<uintptr_t*>(to_higher_half(curr_tbl_phys));
@@ -435,7 +434,7 @@ uintptr_t PageMap::translate(uintptr_t virt_addr) {
     // physical address; used mainly for debugging or low-level I/O.
     uintptr_t curr_table_phys = this->phys_root_addr;
 
-    for (int level = g_max_levels; level >= 1; --level) {
+    for (int level = max_levels; level >= 1; --level) {
         uintptr_t* table_virt = reinterpret_cast<uintptr_t*>(to_higher_half(curr_table_phys));
 
         // Calculate the index for this level
@@ -481,7 +480,7 @@ void PageMap::create_new(PageMap* map) {
     static bool kernel_initialized = false;
     uintptr_t* root_phys           = static_cast<uintptr_t*>(PhysicalManager::alloc());
 
-    if (root_phys == nullptr) {
+    if (!root_phys) {
         LOG_ERROR("PageMap::create_new: failed to allocate root table");
         return;
     }
@@ -630,12 +629,12 @@ void PageMap::global_init() {
 
     if (has_la57) {
         if (cr4.la57) {
-            g_max_levels = 5;
+            max_levels = 5;
         } else {
-            g_max_levels = 4;
+            max_levels = 4;
         }
     } else {
-        g_max_levels = 4;
+        max_levels = 4;
     }
 
     cr4.write();
@@ -646,7 +645,7 @@ void PageMap::global_init() {
 
     init_pat();
 
-    LOG_INFO("Paging: initialized (levels=%d 1G=%d PCID=%d)", g_max_levels, support_1g_pages,
+    LOG_INFO("Paging: initialized (levels=%d 1G=%d PCID=%d)", max_levels, support_1g_pages,
              pcid_supported);
 }
 
@@ -679,7 +678,7 @@ uint8_t PageMap::get_protection_key(uintptr_t virt_addr, PageSize size) {
 
     uint64_t* pte = get_pte(virt_addr, target_level, false);
 
-    if ((pte == nullptr) || (*pte & FlagPresent)) {
+    if (!pte || (*pte & FlagPresent)) {
         return 0;
     }
 

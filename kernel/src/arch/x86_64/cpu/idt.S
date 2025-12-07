@@ -6,7 +6,7 @@
 # interrupt_common_stub:
 #  - Saves all GPRs into a TrapFrame-compatible layout.
 #  - Optionally switches GS between user and kernel for per‑CPU data.
-#  - Calls the C++ `exception_handler`, then restores state and iretq's.
+#  - Calls the `exception_handler`, then restores state and iretq's.
 # This centralizes interrupt entry/exit so IDT entries can all jump here.
 interrupt_common_stub:
     cld

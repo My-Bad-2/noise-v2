@@ -59,9 +59,6 @@ inline constexpr T from_higher_half(T val) {
 
 /**
  * @brief Initialize memory subsystem.
- *
- * Sets the higher-half direct-map offset from the bootloader and
- * initializes the physical memory manager.
  */
 void init();
 

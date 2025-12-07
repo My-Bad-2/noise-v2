@@ -234,7 +234,7 @@ VmFreeRegion* VirtualAllocator::new_node() {
 
 void VirtualAllocator::return_node(VmFreeRegion* node) {
     // Return metadata to the free-node pool instead of freeing pages:
-    // we keep node pages around to serve future allocation patterns.
+    // we keep node pages around to serve future allocations.
     node->next      = this->free_nodes_head;
     free_nodes_head = node;
 }
@@ -368,6 +368,7 @@ void VirtualAllocator::init(uintptr_t start, size_t length) {
     if (!this->region_head) {
         PANIC("VirtualAllocator: failed to initialize region head");
     }
+    
     this->region_head->start  = start;
     this->region_head->length = length;
     this->region_head->next   = nullptr;

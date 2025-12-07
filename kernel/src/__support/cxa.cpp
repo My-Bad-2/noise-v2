@@ -13,5 +13,5 @@ extern "C" void __cxa_guard_abort(__guard*) {}
 }  // namespace __cxxabiv1
 
 extern "C" void __cxa_pure_virtual() {
-    // Do nothing or print an error message.
+    // Do nothing
 }

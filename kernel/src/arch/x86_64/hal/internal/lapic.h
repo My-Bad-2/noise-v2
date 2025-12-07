@@ -7,8 +7,7 @@
  *
  * This header is private to the LAPIC implementation and mirrors the
  * architectural layout of APIC registers, LVT encodings, and MSR base
- * indices. Higher-level code should go through `hal::Lapic` instead of
- * using these constants directly.
+ * indices.
  */
 
 // MSRs

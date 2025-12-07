@@ -168,8 +168,7 @@ void* KernelHeap::alloc(size_t size) {
     LockGuard guard(lock);
 
     // Best-fit search over the free-list. This minimizes leftover
-    // fragment sizes at the cost of a linear scan, which is acceptable
-    // for a kernel-only heap with moderate allocation rates.
+    // fragment sizes at the cost of a linear scan.
     BlockHeader* best_fit = nullptr;
     BlockHeader* curr     = this->free_list_head;
 
@@ -244,9 +243,9 @@ void KernelHeap::free(void* ptr) {
     BlockHeader* header =
         reinterpret_cast<BlockHeader*>(reinterpret_cast<char*>(ptr) - sizeof(BlockHeader));
 
-    // Basic sanity check: if the magic doesn't match, we silently ignore
-    // the free. This avoids crashing on double-frees or foreign pointers
-    // but also hides bugs; logs make such events visible during debug.
+    // Basic sanity check: if the magic doesn't match, we ignore the 
+    // free. This avoids crashing on double-frees or foreign pointers
+    // but also hides bugs.
     if (unlikely(header->magic != BLOCK_MAGIC)) {
         LOG_ERROR("KernelHeap: free called with invalid block header %p", header);
         return;

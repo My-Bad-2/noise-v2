@@ -7,10 +7,6 @@
  *  - Map/unmap/translate virtual addresses.
  *  - Map ranges using large pages when possible.
  *  - Load the map into CR3 with optional PCID handling.
- *
- * `VirtualManager` orchestrates the kernel's initial address space:
- *  - Builds the higher-half direct map using the Limine memmap.
- *  - Maps the kernel ELF segments at their intended virtual addresses.
  */
 
 #pragma once

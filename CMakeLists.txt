@@ -70,7 +70,7 @@ include(${uacpi_SOURCE_DIR}/uacpi.cmake)
 add_subdirectory(kernel)
 add_subdirectory(misc/limine)
 
-project_enable_doxygen("awesome-sidebar")
+# project_enable_doxygen("awesome-sidebar")
 
 build_iso(
     TRIGGER_NAME "iso"

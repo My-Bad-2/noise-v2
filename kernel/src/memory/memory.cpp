@@ -18,7 +18,6 @@ uintptr_t hhdm_offset = 0;
 }
 
 void init() {
-    // HHDM offset provided by Limine.
     __details::hhdm_offset = hhdm_request.response->offset;
     LOG_INFO("Memory HHDM offset set to 0x%lx", __details::hhdm_offset);
 

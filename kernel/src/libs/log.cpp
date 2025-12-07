@@ -1,20 +1,3 @@
-/**
- * @file log.cpp
- * @brief Implementation of the kernel logging backend.
- *
- * Provides the concrete implementation of `kernel::__details::Logger`.
- * Messages are colorized using ANSI escape sequences and printed via
- * stdio-style functions. `panic()` halts the system.
- *
- * Architectural role:
- *  - This is the central logging sink used across subsystems (memory,
- *    arch, drivers, etc.), typically via the `LOG_*` macros.
- *  - Early in boot, it usually writes to a serial console provided by
- *    `kernel::arch::get_kconsole()` or by a basic stdio backend.
- *  - `panic()` is the common fatal error path and ultimately calls
- *    `kernel::arch::halt(false)` to stop execution.
- */
-
 #include <stdio.h>
 #include <stdarg.h>
 #include "arch.hpp"
@@ -75,7 +58,7 @@ void Logger::log(LogLevel level, const char* file, int line, const char* format,
     const char* color     = level_to_color(level);
     const char* level_str = level_to_string(level);
 
-    // Prefix: [LEVEL] (file:line) before the user message.
+    // Prefix: [LEVEL] (file:line) before the message.
     printf("%s[%s] (%s:%d) ", color, level_str, file, line);
 
     // Forward the variable arguments to vprintf.

@@ -3,9 +3,9 @@
  * @brief Physical memory manager (PMM) interface.
  *
  * Exposes a page-based physical memory allocator for the kernel. All
- * allocations and frees operate on 4 KiB pages (`PMM_PAGE_SIZE`).
+ * allocations and frees operate on 4 KiB pages (`PAGE_SIZE_4K`).
  *
- * In the overall architecture, this is the *bottom-most* allocator:
+ * In the overall architecture, this is the bottom-most allocator:
  *  - It owns raw physical pages discovered from the bootloader's memory map.
  *  - Higher layers (paging, kernel heap, slab allocators, etc.) build on
  *    top of this interface and usually do not touch physical pages directly.
@@ -74,9 +74,6 @@
 
 namespace kernel::memory {
 
-/// Size of a single physical page (4 KiB). Used throughout the kernel.
-constexpr size_t PMM_PAGE_SIZE = 0x1000;
-
 /// Number of pages kept in the quick free-page stack cache. This cache
 /// accelerates frequent single-page alloc/free patterns commonly seen
 /// in page-table management and small kernel allocations.
@@ -103,8 +100,8 @@ struct PMMStats {
  * In the architecture:
  *  - `kernel::memory::init()` sets up the higher-half mapping and then
  *    calls `PhysicalManager::init()`.
- *  - All physical memory consumers (page tables, frame allocators, etc.)
- *    obtain raw physical frames via this class.
+ *  - All physical memory consumers (page tables, etc.) obtain raw physical
+ *    frames via this class.
  */
 class PhysicalManager {
    public:
@@ -114,7 +111,7 @@ class PhysicalManager {
      * Must be called once early during boot, after the bootloader memory
      * map is available. It:
      *  - Parses the Limine memory map.
-     *  - Reserves space for internal metadata (bitmap + cache).
+     *  - Reserves space for internal metadata (bitmap(s) + cache).
      *  - Marks all pages as used, then frees back the usable ones.
      */
     static void init();
@@ -136,7 +133,7 @@ class PhysicalManager {
      * boundaries (e.g. paging structures, DMA buffers).
      *
      * @param count     Number of pages to allocate.
-     * @param alignment Required alignment in bytes (multiple of PMM_PAGE_SIZE).
+     * @param alignment Required alignment in bytes (multiple of PAGE_SIZE_4K).
      * @return Physical address on success, nullptr on failure.
      */
     static void* alloc_aligned(size_t count, size_t alignment);

@@ -10,6 +10,7 @@
 #include "memory/pagemap.hpp"
 #include "libs/math.hpp"
 #include "libs/spinlock.hpp"
+#include "hal/timer.hpp"
 
 using namespace kernel::memory;
 
@@ -134,25 +135,29 @@ uacpi_handle uacpi_kernel_create_event() {
 void uacpi_kernel_free_event(uacpi_handle handle) {}
 
 uacpi_handle uacpi_kernel_create_spinlock() {
-    return reinterpret_cast<uacpi_handle>(new kernel::SpinLock);
+    return reinterpret_cast<uacpi_handle>(new kernel::IrqLock);
 }
 
 void uacpi_kernel_free_spinlock(uacpi_handle handle) {
-    delete reinterpret_cast<kernel::SpinLock*>(handle);
+    delete reinterpret_cast<kernel::IrqLock*>(handle);
 }
 
 uacpi_cpu_flags uacpi_kernel_lock_spinlock(uacpi_handle handle) {
-    reinterpret_cast<kernel::SpinLock*>(handle)->lock();
+    reinterpret_cast<kernel::IrqLock*>(handle)->lock();
     return 0;
 }
 
 void uacpi_kernel_unlock_spinlock(uacpi_handle handle, uacpi_cpu_flags) {
-    reinterpret_cast<kernel::SpinLock*>(handle)->unlock();
+    reinterpret_cast<kernel::IrqLock*>(handle)->unlock();
 }
 
-void uacpi_kernel_stall(uacpi_u8 usec) {}
+void uacpi_kernel_stall(uacpi_u8 usec) {
+    kernel::hal::Timer::udelay(usec);
+}
 
-void uacpi_kernel_sleep(uacpi_u64 msec) {}
+void uacpi_kernel_sleep(uacpi_u64 msec) {
+    kernel::hal::Timer::mdelay(static_cast<uint32_t>(msec));
+}
 
 uacpi_u64 uacpi_kernel_get_nanoseconds_since_boot() {
     return 0;

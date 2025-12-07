@@ -35,9 +35,7 @@ void init() {
 }
 
 hal::IUART* get_kconsole() {
-    // Static instance bound to the default COM port selected by UART16550.
     static hal::UART16550 uart{};
-    // Upcast to the generic HAL UART interface.
     return &uart;
 }
 

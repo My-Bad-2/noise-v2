@@ -37,12 +37,7 @@ void PIT::set_frequency(uint32_t frequency) {
     out<uint8_t>(PORT_CHANNEL0, static_cast<uint8_t>((divisor >> 8) & 0xFF));
 }
 
-void PIT::prepare_wait(uint16_t ms) {
-    // if (ms > 50) {
-    //     ms = 50;
-    // }
-
-    // uint32_t count = (BASE_FREQUENCY_HZ * ms) / 1000;
+void PIT::prepare_wait(uint16_t) {
     uint8_t cmd    = CMD_CHANNEL2 | CMD_ACCESS_LH | CMD_MODE0;
 
     out<uint8_t>(PORT_COMMAND, cmd);
@@ -115,7 +110,7 @@ void PIT::udelay(uint32_t us) {
 
 void PIT::mdelay(uint32_t ms) {
     while (ms > 50) {
-        wait_ticks(BASE_FREQUENCY_HZ * 50 / 1000);
+        wait_ticks((BASE_FREQUENCY_HZ * 50) / 1000);
         ms -= 50;
     }
 

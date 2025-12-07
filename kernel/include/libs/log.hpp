@@ -1,14 +1,3 @@
-/**
- * @file log.hpp
- * @brief Simple logging interface and convenience macros.
- *
- * This header defines log-level macros (`LOG_DEBUG`, `LOG_INFO`, etc.)
- * that capture the source file and line number, and forward formatted
- * messages to the `kernel::__details::Logger` backend.
- *
- * The implementation assumes that a basic console output mechanism
- * is available.
- */
 #pragma once
 
 #include <cstdint>

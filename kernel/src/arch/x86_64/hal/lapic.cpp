@@ -20,10 +20,6 @@ uint64_t Lapic::tsc_per_ms         = 0;
 namespace {
 /**
  * @brief Read the current timestamp counter (TSC).
- *
- * This provides a raw cycle counter used by timing and calibration
- * code. It is intentionally minimal and architecture-specific; higher
- * layers should interpret the result in terms of calibrated units.
  */
 size_t rdtsc() {
     uint32_t lo, hi;
@@ -148,7 +144,7 @@ void Lapic::start_timer_legacy(uint32_t count) {
     write(LAPIC_TIMER_INIT, count);
 }
 
-void Lapic::arm_ts_deadline(uint64_t target_tsc) {
+void Lapic::arm_tsc_deadline(uint64_t target_tsc) {
     arch::Msr msr;
     msr.index = TSC_DEADLINE_MSR;
     msr.value = target_tsc;
@@ -290,7 +286,7 @@ void Lapic::udelay(uint32_t us) {
 
     // Set count
     uint64_t ticks = (static_cast<uint64_t>(us) * ticks_per_ms) / 1000;
-    write(LAPIC_TIMER_INIT, ticks);
+    write(LAPIC_TIMER_INIT, static_cast<uint32_t>(ticks));
 
     // Spin wait
     while (read(LAPIC_TIMER_CUR) > 0) {

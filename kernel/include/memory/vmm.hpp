@@ -161,7 +161,7 @@ class VirtualManager {
      *
      * @param count Number of pages of the given size to allocate.
      * @param size  Page granularity (4K/2M/1G).
-     * @param flags Logical access flags (Read/Write/User/Execute/Global).
+     * @param flags Logical access flags (Read/Write/User/Execute/Global/Lazy).
      * @param cache Cache policy for the mapping (e.g. WriteBack, WC).
      *
      * The function:

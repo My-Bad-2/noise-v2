@@ -42,7 +42,7 @@ class Lapic {
 
     static void configure_timer(uint8_t vector, TimerMode mode);
     static void start_timer_legacy(uint32_t count);
-    static void arm_ts_deadline(uint64_t target_tsc);
+    static void arm_tsc_deadline(uint64_t target_tsc);
     static void stop_timer();
 
     /// Calibrate LAPIC and TSC against a known time base.

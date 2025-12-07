@@ -1,15 +1,5 @@
 #pragma once
 
-/**
- * @file arch.hpp
- * @brief x86_64 architecture-level initialization and helpers.
- *
- * This header declares the public entry points used by the kernel to
- * initialize and interact with the x86_64 architecture-specific layer.
- * It exposes a minimal set of functions for early setup, obtaining a
- * console UART, and basic CPU control (halt/pause).
- */
-
 #include "hal/interface/uart.hpp"
 
 namespace kernel::arch {

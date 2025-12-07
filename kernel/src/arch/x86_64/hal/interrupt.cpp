@@ -29,7 +29,7 @@ void InterruptDispatcher::dispatch(TrapFrame* frame) {
         IrqStatus status = handlers[vector]->handle(frame);
 
         if (status == IrqStatus::Reschedule) {
-            // If a driver is unblocked by this IRQ, we invoke the scheduler
+            // TODO: If a driver is unblocked by this IRQ, we invoke the scheduler 
             // to switch to it immediately.
             LOG_DEBUG("IDT: vector %u requested reschedule on CPU %u", vector, cpu->cpu_id);
         }

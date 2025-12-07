@@ -58,7 +58,6 @@ Msr Msr::read(uint32_t index) {
     msr.index = index;
     msr.value = (static_cast<uint64_t>(high) << 32) | low;
 
-    // LOG_DEBUG("MSR read index=0x%x value=0x%lx", index, msr.value);
     return msr;
 }
 
@@ -66,7 +65,6 @@ void Msr::write() {
     uint32_t low  = this->value & 0xFFFFFFFF;
     uint32_t high = this->value >> 32;
 
-    // LOG_DEBUG("MSR write index=0x%x value=0x%lx", this->index, this->value);
     asm volatile("wrmsr" ::"c"(this->index), "a"(low), "d"(high));
 }
 }  // namespace kernel::arch

@@ -1,17 +1,3 @@
-/**
- * @file spinlock.hpp
- * @brief Simple ticket-based spinlock and RAII lock guard utilities.
- *
- * This header provides a small synchronization primitive::
- *
- *  - A ticket-based spinlock implementation that avoids starvation and
- *    preserves FIFO lock acquisition order.
- *  - A configurable `LockGuard` RAII wrapper that works with any mutex-like
- *    type exposing `lock`, `try_lock`, and `unlock`.
- *
- * The implementation is header-only and uses `std::atomic` for safety.
- */
-
 #pragma once
 
 #include <atomic>
@@ -23,16 +9,21 @@ namespace __details {
 
 /**
  * @brief Enumeration of lock types supported by the `Spinlock` template.
+ *
+ * Different specializations encode different policies:
+ *  - `SpinlockSpin`: pure spinning, no IRQ fiddling.
+ *  - `SpinlockIrq`: spin + interrupt masking while held.
  */
 enum class LockType : uint8_t {
     SpinlockSpin,
+    SpinlockIrq,
 };
 
 /**
  * @brief Primary spinlock template, specialized by LockType.
  *
  * Additional lock strategies (e.g. backoff, MCS) could be implemented
- * as further specializations.
+ * as further specializations without affecting callers.
  */
 template <LockType type>
 class Spinlock;
@@ -65,9 +56,10 @@ class Spinlock<LockType::SpinlockSpin> {
     /**
      * @brief Acquire the lock, spinning until it becomes available.
      *
-     * Each caller obtains a unique ticket and then waits until its ticket
-     * is equal to `serving_ticket`. While waiting, the function issues
-     * `arch::pause()` to behave better on SMT systems and reduce power.
+     * Design choice:
+     *  - Use a monotonically-increasing ticket counter instead of a simple
+     *    test-and-set flag so that high-contention scenarios remain fair
+     *    (FIFO) and cache-friendly.
      */
     void lock() {
         // Reserve our ticket number atomically.
@@ -75,7 +67,8 @@ class Spinlock<LockType::SpinlockSpin> {
 
         // Spin until our ticket is the one being served.
         while (this->serving_ticket.load(std::memory_order_acquire) != ticket) {
-            arch::pause();  // Hint to CPU that we are in a tight spin loop.
+            // Hint to CPU that we are in a tight spin loop (SMT-friendly).
+            arch::pause();
         }
     }
 
@@ -85,8 +78,8 @@ class Spinlock<LockType::SpinlockSpin> {
      * Increments the `serving_ticket` counter, allowing the next waiting
      * ticket holder (if any) to acquire the lock.
      *
-     * @return true if the lock was held and is now released, false if it
-     *         was already unlocked when `unlock()` was called.
+     * Returning `false` on an already-unlocked lock is mainly useful for
+     * debug/invariants; callers normally assume well-formed usage.
      */
     bool unlock() {
         if (!this->is_locked()) {
@@ -104,10 +97,9 @@ class Spinlock<LockType::SpinlockSpin> {
     /**
      * @brief Try to acquire the lock without blocking.
      *
-     * If the lock is currently held, this function returns immediately
-     * without spinning.
-     *
-     * @return true if the lock was acquired, false otherwise.
+     * Rationale:
+     *  - Allows callers to build non-blocking algorithms or implement
+     *    opportunistic fast paths where spinning would be undesirable.
      */
     bool try_lock() {
         if (this->is_locked()) {
@@ -118,7 +110,6 @@ class Spinlock<LockType::SpinlockSpin> {
         return true;
     }
 
-   private:
     /**
      * @brief Check whether the lock is currently held by any thread.
      *
@@ -126,7 +117,9 @@ class Spinlock<LockType::SpinlockSpin> {
      * become stale immediately after it is computed, but it is useful
      * for diagnostics or building higher-level operations.
      *
-     * @return true if at least one thread holds the lock, false otherwise.
+     * Interpretation:
+     *  - `next_ticket == serving_ticket` means no one holds the lock.
+     *  - Any difference means at least one waiter/owner exists.
      */
     bool is_locked() {
         size_t curr = this->serving_ticket.load(std::memory_order_relaxed);
@@ -135,10 +128,74 @@ class Spinlock<LockType::SpinlockSpin> {
         return curr != next;
     }
 
+   private:
     /// Next ticket number to assign; monotonically increasing.
     std::atomic_size_t next_ticket;
     /// Ticket number currently being served (i.e. owning the lock).
     std::atomic_size_t serving_ticket;
+};
+
+/**
+ * @brief Spinlock that also saves/restores interrupt state.
+ *
+ * Use this when protecting data structures that are touched from both
+ * normal and interrupt context on the same CPU. The lock:
+ *  - Captures the current IF flag before locking.
+ *  - Disables interrupts while held (if they were enabled).
+ *  - Restores the previous interrupt state on unlock.
+ *
+ * This keeps critical sections atomic with respect to IRQ handlers
+ * without placing extra requirements on callers.
+ */
+template <>
+class Spinlock<LockType::SpinlockIrq> {
+   public:
+    constexpr Spinlock() : internal_lock(), interrupts(false) {}
+
+    // Spinlocks are non-copyable and non-movable to avoid accidental sharing.
+    Spinlock(const Spinlock&) = delete;
+    Spinlock(Spinlock&&)      = delete;
+
+    Spinlock& operator=(const Spinlock&) = delete;
+    Spinlock& operator=(Spinlock&&)      = delete;
+
+    void lock() {
+        // Record whether interrupts were enabled when entering.
+        this->interrupts = arch::interrupt_status();
+
+        if (this->interrupts) {
+            // Prevent IRQ handlers from racing with this critical section.
+            arch::disable_interrupts();
+        }
+
+        this->internal_lock.lock();
+    }
+
+    bool unlock() {
+        if (!this->internal_lock.unlock()) {
+            return false;
+        }
+
+        // Only re-enable interrupts if we disabled them on entry.
+        if (this->interrupts) {
+            arch::enable_interrupts();
+        }
+
+        return true;
+    }
+
+    bool try_lock() {
+        if (this->internal_lock.is_locked()) {
+            return false;
+        }
+
+        this->lock();
+        return true;
+    }
+
+   private:
+    Spinlock<LockType::SpinlockSpin> internal_lock;
+    bool interrupts;
 };
 
 /**
@@ -151,6 +208,9 @@ class Spinlock<LockType::SpinlockSpin> {
  * // ... do some work ...
  * guard.lock();
  * @endcode
+ *
+ * Motivation:
+ *  - Lets callers defer acquisition until after some non-trivial setup.
  */
 struct DeferLock {
     explicit DeferLock() = default;
@@ -167,6 +227,9 @@ struct DeferLock {
  *   // lock acquisition failed
  * }
  * @endcode
+ *
+ * Motivation:
+ *  - Integrates non-blocking lock acquisition with RAII management.
  */
 struct TryToLock {
     explicit TryToLock() = default;
@@ -176,6 +239,7 @@ struct TryToLock {
  * @brief Tag type: assume the mutex is already locked by the current context.
  *
  * Use when you have manually locked the mutex before constructing the guard.
+ * This is useful when migrating legacy code to RAII-style locking.
  */
 struct AdoptLock {
     explicit AdoptLock() = default;
@@ -201,7 +265,8 @@ constexpr AdoptLock adopt_lock{};
  *  - `bool try_lock()`
  *
  * The guard ensures that `unlock()` is called in its destructor if the
- * guard currently owns the lock.
+ * guard currently owns the lock, making early returns and exceptions
+ * (in non-kernel code) safe with respect to lock lifetime.
  *
  * @tparam Mutex Mutex/lockable type to manage.
  */
@@ -216,6 +281,9 @@ class LockGuard {
     /**
      * @brief Construct and immediately lock the given mutex.
      *
+     * This is the most common pattern: acquire on construction and
+     * release on scope exit.
+     *
      * @param m Mutex to lock.
      */
     explicit LockGuard(MutexType& m) : m_mutex(&m), m_owns(false) {
@@ -227,6 +295,7 @@ class LockGuard {
      * @brief Construct without locking, using the DeferLock tag.
      *
      * Caller is responsible for calling `lock()` explicitly later.
+     * This is useful when some setup must happen before acquiring.
      */
     LockGuard(MutexType& m, DeferLock) noexcept : m_mutex(&m), m_owns(false) {}
 
@@ -234,6 +303,7 @@ class LockGuard {
      * @brief Construct and attempt to acquire the lock without blocking.
      *
      * Ownership is recorded only if `try_lock()` succeeds.
+     * This enables opportunistic acquisition without mandatory spinning.
      */
     LockGuard(MutexType& m, TryToLock) : m_mutex(&m), m_owns(m.try_lock()) {}
 
@@ -241,11 +311,15 @@ class LockGuard {
      * @brief Construct a guard that assumes ownership of an already-locked mutex.
      *
      * The mutex must be locked by the current context before construction.
+     * This avoids double-locking while still getting RAII semantics.
      */
     LockGuard(MutexType& m, AdoptLock) noexcept : m_mutex(&m), m_owns(true) {}
 
     /**
      * @brief Move-construct from another guard, transferring ownership.
+     *
+     * Design:
+     *  - Prevents double-unlock by explicitly nulling out the source.
      */
     LockGuard(LockGuard&& other) noexcept : m_mutex(other.m_mutex), m_owns(other.m_owns) {
         other.m_mutex = nullptr;
@@ -254,6 +328,8 @@ class LockGuard {
 
     /**
      * @brief Destructor: unlocks the mutex if currently owned.
+     *
+     * This is the core RAII guarantee: leaving the scope releases the lock.
      */
     ~LockGuard() {
         if (m_owns) {
@@ -268,6 +344,7 @@ class LockGuard {
      * @brief Move-assign from another guard, transferring ownership.
      *
      * If this guard currently owns a mutex, it will be unlocked first.
+     * This ensures we never "lose" a lock during reassignment.
      */
     LockGuard& operator=(LockGuard&& other) noexcept {
         if (this != &other) {
@@ -327,7 +404,8 @@ class LockGuard {
     /**
      * @brief Unlock the mutex if currently owned.
      *
-     * No-op if the guard does not currently own the lock.
+     * No-op if the guard does not currently own the lock. This is safe
+     * to call multiple times in error-handling code paths.
      */
     void unlock() {
         if (!m_owns) {
@@ -344,6 +422,9 @@ class LockGuard {
      * This transfers raw access to the underlying mutex pointer to the
      * caller, who then becomes responsible for unlocking it.
      *
+     * Useful for code that needs to hand off a locked mutex to another
+     * component without triggering a double unlock.
+     *
      * @return Pointer to the managed mutex, or nullptr if none.
      */
     MutexType* release() noexcept {
@@ -355,6 +436,8 @@ class LockGuard {
 
     /**
      * @brief Swap the managed mutex and ownership state with another guard.
+     *
+     * Used primarily by generic algorithms or containers manipulating locks.
      */
     void swap(LockGuard& other) noexcept {
         std::swap(m_mutex, other.m_mutex);
@@ -377,6 +460,9 @@ class LockGuard {
 
     /**
      * @brief Get the underlying mutex pointer.
+     *
+     * Exposes the raw mutex for advanced scenarios (introspection,
+     * condition variables, etc.), without changing ownership.
      */
     MutexType* mutex() const noexcept {
         return m_mutex;
@@ -407,16 +493,22 @@ LockGuard(Mutex&) -> LockGuard<Mutex>;
  * kernel::SpinLock lock;
  * kernel::LockGuard guard(lock);
  * @endcode
+ *
+ * Rationale:
+ *  - Keeps the public API free of the internal `__details` namespace
+ *    while still allowing a single implementation.
  */
 template <class Mutex>
 using LockGuard = __details::LockGuard<Mutex>;
 
 /**
  * @brief Public alias for the default ticket-based spinlock.
- *
- * This is the type most users of this header should use for a simple
- * non-recursive spinlock implementation.
  */
 using SpinLock = __details::Spinlock<__details::LockType::SpinlockSpin>;
+
+/**
+ * @brief Public alias for the IRQ-safe spinlock.
+ */
+using IrqLock = __details::Spinlock<__details::LockType::SpinlockIrq>;
 
 }  // namespace kernel

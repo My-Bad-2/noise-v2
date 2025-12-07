@@ -109,7 +109,7 @@ void PhysicalManager::flush_cache_to_bitmap() {
     // Empty the stack back into the bitmap.
     while (pmm_state.stack_top > 0) {
         uintptr_t addr = pmm_state.free_stack[--pmm_state.stack_top];
-        free_to_bitmap(addr / PMM_PAGE_SIZE, 1);
+        free_to_bitmap(addr / PAGE_SIZE_4K, 1);
     }
 }
 
@@ -149,7 +149,7 @@ void* PhysicalManager::alloc_from_bitmap(size_t count) {
                         pmm_state.free_idx_hint = idx + 1;
 
                         LOG_DEBUG("PMM alloc_from_bitmap (summary path) page=%zu", idx);
-                        return reinterpret_cast<void*>(idx * PMM_PAGE_SIZE);
+                        return reinterpret_cast<void*>(idx * PAGE_SIZE_4K);
                     }
                 }
             }
@@ -180,7 +180,7 @@ void* PhysicalManager::alloc_from_bitmap(size_t count) {
                             pmm_state.free_idx_hint = idx + 1;
 
                             LOG_DEBUG("PMM alloc_from_bitmap (wrap+summary) page=%zu", idx);
-                            return reinterpret_cast<void*>(idx * PMM_PAGE_SIZE);
+                            return reinterpret_cast<void*>(idx * PAGE_SIZE_4K);
                         }
                     }
                 }
@@ -237,7 +237,7 @@ void* PhysicalManager::alloc_from_bitmap(size_t count) {
 
                         LOG_DEBUG("PMM alloc_from_bitmap (range) start=%zu count=%zu", block_start,
                                   count);
-                        return reinterpret_cast<void*>(block_start * PMM_PAGE_SIZE);
+                        return reinterpret_cast<void*>(block_start * PAGE_SIZE_4K);
                     }
                 } else {
                     consecutive = 0;
@@ -299,12 +299,12 @@ void* PhysicalManager::alloc(size_t count) {
 }
 
 void* PhysicalManager::alloc_aligned(size_t count, size_t alignment) {
-    if ((count == 0) || (alignment == 0) || (alignment % PMM_PAGE_SIZE != 0)) {
+    if ((count == 0) || (alignment == 0) || (alignment % PAGE_SIZE_4K != 0)) {
         LOG_WARN("PMM alloc_aligned invalid params count=%zu align=0x%zx", count, alignment);
         return nullptr;
     }
 
-    size_t pages_per_alignment = alignment / PMM_PAGE_SIZE;
+    size_t pages_per_alignment = alignment / PAGE_SIZE_4K;
 
     LockGuard guard(pmm_state.lock);
 
@@ -339,7 +339,7 @@ void* PhysicalManager::alloc_aligned(size_t count, size_t alignment) {
                 pmm_state.used_pages += count;
                 pmm_state.free_idx_hint = curr + count;
 
-                void* addr = reinterpret_cast<void*>(curr * PMM_PAGE_SIZE);
+                void* addr = reinterpret_cast<void*>(curr * PAGE_SIZE_4K);
                 LOG_DEBUG("PMM alloc_aligned count=%zu align=0x%zx addr=%p used_pages=%zu", count,
                           alignment, addr, pmm_state.used_pages);
                 return addr;
@@ -375,7 +375,7 @@ void* PhysicalManager::alloc_clear(size_t count) {
     if (ret != nullptr) {
         // Map into higher-half and clear contents.
         uintptr_t virt = to_higher_half(reinterpret_cast<uintptr_t>(ret));
-        memset(reinterpret_cast<void*>(virt), 0, count * PMM_PAGE_SIZE);
+        memset(reinterpret_cast<void*>(virt), 0, count * PAGE_SIZE_4K);
         LOG_DEBUG("PMM alloc_clear count=%zu addr=%p", count, ret);
     }
 
@@ -424,7 +424,7 @@ void PhysicalManager::free(void* ptr, size_t count) {
                 // free_to_bitmap() decrements used_pages again,
                 // which would result in double-count.
                 pmm_state.used_pages++;
-                free_to_bitmap(reinterpret_cast<uintptr_t>(flushed) / PMM_PAGE_SIZE, 1);
+                free_to_bitmap(reinterpret_cast<uintptr_t>(flushed) / PAGE_SIZE_4K, 1);
             }
         }
 
@@ -436,7 +436,7 @@ void PhysicalManager::free(void* ptr, size_t count) {
     }
 
     // Multi-page free: go directly to bitmap.
-    free_to_bitmap(reinterpret_cast<uintptr_t>(ptr) / PMM_PAGE_SIZE, count);
+    free_to_bitmap(reinterpret_cast<uintptr_t>(ptr) / PAGE_SIZE_4K, count);
     LOG_DEBUG("PMM free range addr=%p count=%zu used_pages=%zu", ptr, count, pmm_state.used_pages);
 }
 
@@ -446,11 +446,11 @@ void PhysicalManager::reclaim_type(size_t memmap_type) {
         limine_memmap_entry* entry = memmap_request.response->entries[i];
 
         if (entry->type == memmap_type) {
-            uintptr_t base_aligned = align_up(entry->base, PMM_PAGE_SIZE);
-            uintptr_t end_aligned  = align_down(entry->base + entry->length, PMM_PAGE_SIZE);
+            uintptr_t base_aligned = align_up(entry->base, PAGE_SIZE_4K);
+            uintptr_t end_aligned  = align_down(entry->base + entry->length, PAGE_SIZE_4K);
 
             if (end_aligned > base_aligned) {
-                size_t pages = (end_aligned - base_aligned) / PMM_PAGE_SIZE;
+                size_t pages = (end_aligned - base_aligned) / PAGE_SIZE_4K;
                 free(reinterpret_cast<void*>(base_aligned), pages);
                 LOG_INFO("PMM reclaimed type=%zu base=0x%lx pages=%zu", memmap_type, base_aligned,
                          pages);
@@ -463,17 +463,15 @@ PMMStats PhysicalManager::get_stats() {
     LockGuard guard(pmm_state.lock);
 
     PMMStats stats     = {};
-    stats.total_memory = pmm_state.total_pages * PMM_PAGE_SIZE;
-    stats.used_memory  = pmm_state.used_pages * PMM_PAGE_SIZE;
-    stats.free_memory  = (pmm_state.total_pages - pmm_state.used_pages) * PMM_PAGE_SIZE;
+    stats.total_memory = pmm_state.total_pages * PAGE_SIZE_4K;
+    stats.used_memory  = pmm_state.used_pages * PAGE_SIZE_4K;
+    stats.free_memory  = (pmm_state.total_pages - pmm_state.used_pages) * PAGE_SIZE_4K;
 
     return stats;
 }
 
 void PhysicalManager::init() {
-    // Validate Limine memory map response (we depend on it as our source
-    // of truth for what physical ranges are safe to manage).
-    if ((memmap_request.response == nullptr) || memmap_request.response->entries == nullptr) {
+    if (!memmap_request.response || !memmap_request.response->entries) {
         PANIC("Error in Limine Memory Map");
     }
 
@@ -503,7 +501,7 @@ void PhysicalManager::init() {
         }
     }
 
-    pmm_state.total_pages = div_roundup(highest_addr, PMM_PAGE_SIZE);
+    pmm_state.total_pages = div_roundup(highest_addr, PAGE_SIZE_4K);
     LOG_INFO("PMM: highest_addr=0x%lx total_pages=%zu", highest_addr, pmm_state.total_pages);
 
     size_t bitmap_bytes      = align_up(div_roundup(pmm_state.total_pages, 8u), 8u);
@@ -529,19 +527,19 @@ void PhysicalManager::init() {
     for (size_t i = 0; i < memmap_count; ++i) {
         limine_memmap_entry* entry = memmaps[i];
 
-        // Reject 0x0 base to avoid clashing with early identity mappings.
+        // Reject 0x0 base
         if (entry->base == 0) {
             continue;
         }
 
         if (entry->type == LIMINE_MEMMAP_USABLE && entry->length >= total_metadata_bytes) {
-            if ((best_candidate == nullptr) || (entry->base > best_candidate->base)) {
+            if (!best_candidate || (entry->base > best_candidate->base)) {
                 best_candidate = entry;
             }
         }
     }
 
-    if (best_candidate == nullptr) {
+    if (!best_candidate) {
         // If no high memory found, check for any suitable memory.
         for (size_t i = 0; i < memmap_count; ++i) {
             limine_memmap_entry* entry = memmaps[i];
@@ -562,8 +560,8 @@ void PhysicalManager::init() {
              best_candidate->base, best_candidate->length);
 
     if (meta_base == 0) {
-        meta_base += PMM_PAGE_SIZE;
-        best_candidate->length -= PMM_PAGE_SIZE;
+        meta_base += PAGE_SIZE_4K;
+        best_candidate->length -= PAGE_SIZE_4K;
 
         if (best_candidate->length < total_metadata_bytes) {
             PANIC("No suitable memory hole found for metadata of size 0x%lx", total_metadata_bytes);
@@ -594,7 +592,7 @@ void PhysicalManager::init() {
               reinterpret_cast<uintptr_t>(pmm_state.summary_bitmap), pmm_state.summary_entries,
               reinterpret_cast<uintptr_t>(pmm_state.free_stack));
 
-    // Initially mark all pages as used; we will then *free* only the
+    // Initially mark all pages as used; we will then free only the
     // ranges that Limine reports as usable. This ensures we never
     // accidentally treat "unknown" memory as allocatable.
     memset(pmm_state.bitmap, 0xFF, bitmap_bytes);
@@ -611,15 +609,15 @@ void PhysicalManager::init() {
             size_t len     = entry->length;
 
             if (base == 0) {
-                if (len >= PMM_PAGE_SIZE) {
-                    base += PMM_PAGE_SIZE;
-                    len -= PMM_PAGE_SIZE;
+                if (len >= PAGE_SIZE_4K) {
+                    base += PAGE_SIZE_4K;
+                    len -= PAGE_SIZE_4K;
                 } else {
                     continue;
                 }
             }
 
-            size_t pages = len / PMM_PAGE_SIZE;
+            size_t pages = len / PAGE_SIZE_4K;
             reclaimed_pages += pages;
 
             if (len > 0) {
@@ -634,7 +632,7 @@ void PhysicalManager::init() {
 
     PMMStats stats = get_stats();
     LOG_INFO("PMM initialized: total_pages=%zu (~%zu MiB), reclaimed=%zu pages, free=%zu MiB",
-             pmm_state.total_pages, (pmm_state.total_pages * PMM_PAGE_SIZE) >> 20, reclaimed_pages,
+             pmm_state.total_pages, (pmm_state.total_pages * PAGE_SIZE_4K) >> 20, reclaimed_pages,
              stats.free_memory >> 20);
 }
 

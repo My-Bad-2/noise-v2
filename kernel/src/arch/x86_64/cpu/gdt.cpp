@@ -7,7 +7,7 @@ extern "C" void load_gdt_and_flush(kernel::cpu::arch::GDTR* gdtr);
 
 #define GDT_ACCESS_TSS 0x09  // 64-bit TSS (Available)
 
-#define GDT_ACCESS_ACCESSED   (1 << 0)  // CPU Accessed Bit
+#define GDT_ACCESS_ACCESSED   (1 << 0)
 #define GDT_ACCESS_READWRITE  (1 << 1)
 #define GDT_ACCESS_CONFORMING (1 << 2)
 #define GDT_ACCESS_EXECUTABLE (1 << 3)
@@ -63,6 +63,7 @@ void GDTManager::setup_gdt(CPUData* cpu) {
     uint64_t tss_base  = reinterpret_cast<uint64_t>(&cpu->tss_block);
     uint64_t tss_limit = sizeof(TSSBlock) - 1;
 
+    // 5: TSS Descriptor
     TSSDescriptor* tss_desc = reinterpret_cast<TSSDescriptor*>(&cpu->gdt[5]);
     tss_desc->limit_low     = (tss_limit & 0xFFFF);
     tss_desc->base_low      = (tss_base & 0xFFFF);

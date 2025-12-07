@@ -14,6 +14,7 @@ load_gdt_and_flush:
     movw %ax, %ds
     movw %ax, %es
     movw %ax, %fs
+    movw %ax, %gs
     movw %ax, %ss
 
     # Far return through the new code segment (selector 0x08).

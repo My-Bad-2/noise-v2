@@ -115,8 +115,7 @@ void ACPI::parse_tables() {
                 break;
             }
             default:
-                // For now, silently skip unknown MADT entry types. Logging
-                // could be added here if debugging platform differences.
+                // For now, silently skip unknown MADT entry types.
                 break;
         }
 
