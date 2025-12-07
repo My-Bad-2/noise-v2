@@ -2,7 +2,7 @@
 #include <cstdint>
 #include "hal/io.hpp"
 #include "internal/pit.h"
-#include "libs/log.hpp"
+#include "arch.hpp"
 
 namespace kernel::hal {
 void PIT::init(uint32_t frequency) {
@@ -86,7 +86,7 @@ void PIT::wait_ticks(uint16_t ticks) {
     out<uint8_t>(PORT_GATE_CTRL, (ctrl & 0xFD) | 0x01);
 
     while (!(in<uint8_t>(PORT_GATE_CTRL) & 0x20)) {
-        asm volatile("pause");
+        arch::pause();
     }
 
     disable();

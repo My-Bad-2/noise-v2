@@ -100,7 +100,6 @@ else()
 	list(
 		APPEND
 		${PROJECT_NAME}_CX_DEFINES
-		"-DNOISE_DEBUG=0"
 		"-DNDEBUG=1"
 	)
 endif()

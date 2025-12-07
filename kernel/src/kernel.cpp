@@ -14,10 +14,10 @@ extern "C" void kmain() {
     kconsole->init(115200);
 
     memory::init();
+    hal::ACPI::bootstrap();
     arch::init();
     cpu::CPUCoreManager::init_core(0, 0);
-    hal::ACPI::init();
-    LOG_DEBUG("Hello, World!");
+    LOG_INFO("Hello, World!");
 
     arch::halt(true);
 }

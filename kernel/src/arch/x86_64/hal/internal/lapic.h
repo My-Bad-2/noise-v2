@@ -48,8 +48,8 @@
 #define LAPIC_TIMER_DIV  0x3E0
 
 // Flags & Constants
-#define APIC_ENABLE_BIT   (1 << 11)
-#define X2APIC_ENABLE_BIT (1 << 10)
+#define APIC_ENABLE_BIT   (1ul << 11)
+#define X2APIC_ENABLE_BIT (1ul << 10)
 
 #define APIC_DELIVERY_FIXED 0x000
 #define APIC_DELIVERY_NMI   0x400

@@ -31,7 +31,7 @@ class ACPI {
      *
      * This is intended to be called once during early HAL initialization.
      */
-    static void init();
+    static void bootstrap();
 
    private:
     /// Parse ACPI tables of interest (currently MADT) into internal lists.

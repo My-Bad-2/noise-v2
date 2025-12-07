@@ -7,9 +7,13 @@
 //   LOG_INFO("Init complete, rc=%d", rc);
 //   LOG_ERROR("Failed to do thing: %s", reason);
 
+#ifdef NOISE_DEBUG
 #define LOG_DEBUG(fmt, ...)                                                                     \
     kernel::__details::Logger::log(kernel::__details::LogLevel::Debug, __FILE_NAME__, __LINE__, \
                                    fmt, ##__VA_ARGS__)
+#else
+#define LOG_DEBUG(fmt, ...) static_cast<void>(0)
+#endif
 #define LOG_INFO(fmt, ...)                                                                     \
     kernel::__details::Logger::log(kernel::__details::LogLevel::Info, __FILE_NAME__, __LINE__, \
                                    fmt, ##__VA_ARGS__)

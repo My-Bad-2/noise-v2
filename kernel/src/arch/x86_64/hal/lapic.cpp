@@ -6,6 +6,7 @@
 #include "memory/memory.hpp"
 #include "libs/log.hpp"
 #include "hal/pit.hpp"
+#include "hal/hpet.hpp"
 #include <cpuid.h>
 
 namespace kernel::hal {
@@ -20,11 +21,46 @@ uint64_t Lapic::tsc_per_ms         = 0;
 namespace {
 /**
  * @brief Read the current timestamp counter (TSC).
+ *
+ * This is intentionally kept private to this TU; higher levels call
+ * `Lapic::get_ticks_ns()` instead of touching the TSC directly.
  */
 size_t rdtsc() {
     uint32_t lo, hi;
     asm volatile("rdtsc" : "=a"(lo), "=d"(hi));
     return (static_cast<size_t>(hi) << 32) | lo;
+}
+
+/**
+ * @brief 10ms wait using the PIT as a coarse timebase.
+ *
+ * This is used as a calibration reference when no better source exists.
+ */
+void pit_wait_10ms() {
+    constexpr uint16_t TARGET_PIT_TICKS = 11932;
+
+    uint16_t pit_start = PIT::read_count();
+
+    while (true) {
+        uint16_t pit_now = PIT::read_count();
+
+        uint16_t delta = pit_start - pit_now;
+
+        if (delta >= TARGET_PIT_TICKS) {
+            break;  // 10 ms passed!
+        }
+
+        arch::pause();
+    }
+}
+
+/**
+ * @brief 10ms wait using HPET as a high-precision reference.
+ *
+ * HPET-backed waits typically give a better TSC/LAPIC calibration.
+ */
+void hpet_wait_10ms() {
+    HPET::mdelay(10);
 }
 }  // namespace
 
@@ -115,7 +151,7 @@ void Lapic::configure_timer(uint8_t vector, TimerMode mode) {
     stop_timer();
 
     if (mode != TimerMode::TSCDeadline) {
-        // Set Divider
+        // For non-deadline modes, we use a fixed divider (16).
         write(LAPIC_TIMER_DIV, 0x3);
     }
 
@@ -132,6 +168,7 @@ void Lapic::configure_timer(uint8_t vector, TimerMode mode) {
             if (tsc_deadline_supported) {
                 lvt_val |= APIC_TIMER_TSC_DEADLINE;
             } else {
+                // Graceful degradation when the CPU lacks deadline mode.
                 lvt_val |= APIC_TIMER_ONESHOT;
             }
             break;
@@ -165,11 +202,98 @@ void Lapic::stop_timer() {
 }
 
 /**
+ * @brief Calibrate LAPIC timer and TSC using the PIT as reference.
+ *
+ * Used when no higher-precision reference (HPET) is available.
+ */
+void Lapic::calibrate_with_pit() {
+    constexpr uint32_t CALIBRATION_MS = 10;
+    PIT::prepare_wait(CALIBRATION_MS);
+
+    perform_calibration_race(pit_wait_10ms);
+
+    PIT::disable();
+    LOG_INFO("LAPIC: calibrated using PIT as 10ms reference");
+}
+
+/**
+ * @brief Calibrate LAPIC timer and TSC using HPET as reference.
+ *
+ * Preferred when HPET is available, as it typically gives more stable
+ * tick values than the PIT.
+ */
+void Lapic::calibrate_with_hpet() {
+    perform_calibration_race(hpet_wait_10ms);
+    LOG_INFO("LAPIC: calibrated using HPET as 10ms reference");
+}
+
+/**
+ * @brief Core calibration routine shared by PIT/HPET paths.
+ *
+ * Runs the LAPIC timer and TSC in parallel for ~10ms, then derives
+ * ticks-per-ms for both counters from the deltas.
+ */
+void Lapic::perform_calibration_race(void (*callback)()) {
+    bool int_enabled = false;
+    if (arch::interrupt_status()) {
+        int_enabled = true;
+        arch::disable_interrupts();
+    }
+
+    // Program LAPIC timer as a large one-shot countdown.
+    write(LAPIC_TIMER_DIV, 0x3);
+    write(LAPIC_LVT_TIMER, APIC_TIMER_ONESHOT | APIC_LVT_MASKED);
+    write(LAPIC_TIMER_INIT, 0xFFFFFFFF);
+
+    asm volatile("lfence");
+    size_t tsc_start = rdtsc();
+
+    // External reference (PIT or HPET) waits ~10ms.
+    callback();
+
+    asm volatile("lfence");
+    size_t tsc_end = rdtsc();
+
+    uint32_t apic_end = read(LAPIC_TIMER_CUR);
+
+    write(LAPIC_TIMER_INIT, 0);
+
+    if (int_enabled) {
+        arch::enable_interrupts();
+    }
+
+    uint32_t apic_ticks_total = 0xFFFFFFFF - apic_end;
+    size_t tsc_ticks_total    = tsc_end - tsc_start;
+
+    // Normalize both counters to "per millisecond" units.
+    ticks_per_ms = apic_ticks_total / 10;
+    tsc_per_ms   = tsc_ticks_total / 10;
+
+    ticks_per_us = ticks_per_ms / 1000;
+
+    if (ticks_per_us == 0) {
+        // Avoid division by zero in delay helpers; keep a minimum granularity.
+        ticks_per_us = 1;
+    }
+
+    if (ticks_per_ms < 1000) {
+        // Very low tick rates tend to produce poor short delays; clamp.
+        ticks_per_ms = 1000;
+    }
+
+    is_calibrated = true;
+}
+
+/**
  * @brief Record calibration data for LAPIC timer delays.
  *
- * The measured tick count is interpreted relative to a known time
- * interval (typically 10ms) so that later micro/millisecond delays can
- * be approximated with LAPIC counts instead of pure spin loops.
+ * Preference order:
+ *  1. Modern CPUID leaf 0x15 (if it exposes usable TSC/Crystal info).
+ *  2. HPET-based 10ms measurement.
+ *  3. PIT-based 10ms measurement.
+ *
+ * This layering lets newer CPUs skip legacy timer usage while still
+ * supporting older hardware gracefully.
  */
 void Lapic::calibrate() {
     uint32_t eax, ebx, ecx, edx;
@@ -182,94 +306,39 @@ void Lapic::calibrate() {
     if (eax != 0 && ecx != 0) {
         // Core Frequency = (Crystal Frequency * Numerator) / Denominator
         uint64_t core_freq_hz = static_cast<uint64_t>(ecx * ebx) / eax;
-        
+
         tsc_per_ms   = core_freq_hz / 1000;
         ticks_per_ms = ecx / 1000;
         ticks_per_us = ticks_per_ms / 1000;
 
         if (ticks_per_us > 0) {
             is_calibrated = true;
-            LOG_INFO("LAPIC: calibrated from CPUID (ticks_per_ms=%u ticks_per_us=%u tsc_per_ms=%lu)",
-                     ticks_per_ms, ticks_per_us, tsc_per_ms);
+            LOG_INFO(
+                "LAPIC: calibrated from CPUID (ticks_per_ms=%u ticks_per_us=%u tsc_per_ms=%lu)",
+                ticks_per_ms, ticks_per_us, tsc_per_ms);
             return;
         }
     }
 
     // If modern CPUID-based calibration is not available or insufficient,
-    // fall back to using the PIT as an external time reference for a
-    // classic 10ms measurement window.
-    bool int_enabled = false;
-
-    if (arch::interrupt_status()) {
-        int_enabled = true;
-        arch::disable_interrupts();
+    // fall back to external 10ms references (HPET preferred over PIT).
+    if (HPET::is_available()) {
+        calibrate_with_hpet();
+    } else {
+        calibrate_with_pit();
     }
 
-    constexpr uint16_t TARGET_PIT_TICKS = 11932;
-    constexpr uint32_t CALIBRATION_MS = 10;
-    PIT::prepare_wait(CALIBRATION_MS);
-
-    write(LAPIC_TIMER_DIV, 0x3);
-    write(LAPIC_LVT_TIMER, APIC_TIMER_ONESHOT | APIC_LVT_MASKED);
-
-    write(LAPIC_TIMER_INIT, 0xFFFFFFFF);
-
-    asm volatile("lfence");
-    size_t tsc_start = rdtsc();
-
-    uint16_t pit_start = PIT::read_count();
-
-    while(true) {
-        uint16_t pit_now = PIT::read_count();
-
-        uint16_t delta = pit_start - pit_now;
-
-        if(delta >= TARGET_PIT_TICKS) {
-            break; // 10 ms passed!
-        }
-
-        asm volatile("pause");
-    }
-
-    asm volatile("lfence");
-    size_t tsc_end = rdtsc();
-
-    uint32_t apic_end = read(LAPIC_TIMER_CUR);
-
-    PIT::disable();
-
-    if (int_enabled) {
-        arch::enable_interrupts();
-    }
-
-    uint32_t apic_ticks_total = 0xFFFFFFFF - apic_end;
-    size_t tsc_ticks_total    = tsc_end - tsc_start;
-
-    ticks_per_ms = apic_ticks_total / CALIBRATION_MS;
-    tsc_per_ms   = tsc_ticks_total / CALIBRATION_MS;
-
-    ticks_per_us = ticks_per_ms / 1000;
-
-    if (ticks_per_us == 0) {
-        ticks_per_us = 1;
-    }
-
-    if (ticks_per_ms == 0) {
-        ticks_per_ms = 1000;
-    }
-
-    is_calibrated = true;
     LOG_INFO("LAPIC: calibrated ticks_per_ms=%u ticks_per_us=%u tsc_per_ms=%lu", ticks_per_ms,
              ticks_per_us, tsc_per_ms);
 }
 
 void Lapic::udelay(uint32_t us) {
     if (!is_calibrated) {
-        // Fallback spinloop
-        // Approximation for 2GHz CPU: 2000 cycles per us.
-        // 'pause' takes ~40-100 cycles
+        // Fallback spinloop when no timebase is calibrated yet.
+        // Approximation for ~2GHz CPU: ~2000 cycles per µs; 'pause' is
+        // cheap and keeps SMT siblings happier.
         for (volatile uint32_t i = 0; i < us * 50; i += 1) {
-            asm volatile("pause");
+            arch::pause();
         }
 
         return;
@@ -284,13 +353,13 @@ void Lapic::udelay(uint32_t us) {
     write(LAPIC_TIMER_DIV, 0x3);  // Div 16
     write(LAPIC_LVT_TIMER, APIC_TIMER_ONESHOT | APIC_LVT_MASKED);
 
-    // Set count
+    // Convert microseconds to LAPIC ticks.
     uint64_t ticks = (static_cast<uint64_t>(us) * ticks_per_ms) / 1000;
     write(LAPIC_TIMER_INIT, static_cast<uint32_t>(ticks));
 
     // Spin wait
     while (read(LAPIC_TIMER_CUR) > 0) {
-        asm volatile("pause");
+        arch::pause();
     }
 
     // Restore timer config
@@ -304,9 +373,11 @@ void Lapic::udelay(uint32_t us) {
 }
 
 void Lapic::mdelay(uint32_t ms) {
-    if(!is_calibrated) {
-        for(volatile uint32_t i = 0; i < ms * 10000; i += 1) {
-            asm volatile("pause");
+    if (!is_calibrated) {
+        // Crude early-boot fallback; good enough before the LAPIC timer
+        // has a meaningful scale.
+        for (volatile uint32_t i = 0; i < ms * 10000; i += 1) {
+            arch::pause();
         }
 
         return;
@@ -314,28 +385,29 @@ void Lapic::mdelay(uint32_t ms) {
 
     uint64_t total_ticks = static_cast<uint64_t>(ms) * ticks_per_ms;
 
-    uint32_t prev_lvt = read(LAPIC_LVT_TIMER);
-    uint32_t prev_div = read(LAPIC_TIMER_DIV);
+    uint32_t prev_lvt  = read(LAPIC_LVT_TIMER);
+    uint32_t prev_div  = read(LAPIC_TIMER_DIV);
     uint32_t prev_init = read(LAPIC_TIMER_INIT);
 
     write(LAPIC_TIMER_DIV, 0x3);
     write(LAPIC_LVT_TIMER, APIC_TIMER_ONESHOT | APIC_LVT_MASKED);
 
-    while(total_ticks > 0xFFFFFFFF) {
+    // If the delay exceeds the 32-bit counter range, split into chunks.
+    while (total_ticks > 0xFFFFFFFF) {
         write(LAPIC_TIMER_INIT, 0xFFFFFFFF);
-        
-        while(read(LAPIC_TIMER_CUR) > 0) {
-            asm volatile("pause");
+
+        while (read(LAPIC_TIMER_CUR) > 0) {
+            arch::pause();
         }
 
         total_ticks -= 0xFFFFFFFF;
     }
 
-    if(total_ticks > 0) {
+    if (total_ticks > 0) {
         write(LAPIC_TIMER_INIT, static_cast<uint32_t>(total_ticks));
 
-        while(read(LAPIC_TIMER_CUR) > 0) {
-            asm volatile("pause");
+        while (read(LAPIC_TIMER_CUR) > 0) {
+            arch::pause();
         }
     }
 
@@ -352,8 +424,10 @@ uint32_t Lapic::get_id() {
     uint32_t val = read(LAPIC_ID);
 
     if (x2apic_active) {
+        // x2APIC exposes the full APIC ID directly in the register.
         return val;
     } else {
+        // xAPIC encodes ID in the high 8 bits.
         return val >> 24;
     }
 }
@@ -401,7 +475,8 @@ void Lapic::send_init_sipi(uint32_t dest_id, uint8_t page) {
         write(LAPIC_ICR_LOW, APIC_DELIVERY_INIT);
     }
 
-    // Wait 10ms
+    // First INIT-SIPI sequence: spec recommends a small delay between INIT
+    // and the first SIPI to give the APs time to reset.
     mdelay(10);
 
     if (x2apic_active) {
@@ -414,7 +489,7 @@ void Lapic::send_init_sipi(uint32_t dest_id, uint8_t page) {
         write(LAPIC_ICR_LOW, APIC_DELIVERY_START | page);
     }
 
-    // Wait 200us
+    // Second SIPI after a short delay per Intel recommendations.
     udelay(200);
 
     if (x2apic_active) {
@@ -430,11 +505,13 @@ void Lapic::send_init_sipi(uint32_t dest_id, uint8_t page) {
 
 uint64_t Lapic::get_ticks_ns() {
     if (!is_calibrated || ticks_per_ms == 0) {
+        // Lack of calibration means no meaningful absolute time yet.
         return 0;
     }
 
     uint64_t now = rdtsc();
 
+    // Convert TSC ticks to nanoseconds using the per-ms calibration.
     return (now * 1000000) / ticks_per_ms;
 }
 }  // namespace kernel::hal

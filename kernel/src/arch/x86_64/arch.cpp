@@ -16,6 +16,7 @@
 #include "hal/handlers/df.hpp"
 #include "hal/pic.hpp"
 #include "hal/pit.hpp"
+#include "hal/hpet.hpp"
 
 namespace kernel::arch {
 namespace {
@@ -32,6 +33,7 @@ void init() {
     // Architecture-specific initialization hook.
     initialize_interrupt_subsystem();
     hal::PIT::init(1000);
+    hal::HPET::init();
 }
 
 hal::IUART* get_kconsole() {

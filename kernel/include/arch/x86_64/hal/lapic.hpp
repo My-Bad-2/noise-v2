@@ -64,6 +64,10 @@ class Lapic {
     static uint32_t read(uint32_t offset);
     static void write(uint32_t offset, uint32_t value);
 
+    static void perform_calibration_race(void (*callback)());
+    static void calibrate_with_pit();
+    static void calibrate_with_hpet();
+
     static MMIORegion lapic_base;
 
     static bool x2apic_active;

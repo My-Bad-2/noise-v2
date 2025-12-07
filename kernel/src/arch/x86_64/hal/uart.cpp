@@ -92,7 +92,7 @@ bool UART16550::init(uint32_t baud_rate) {
     size_t spins               = 0;
     constexpr size_t max_spins = (1 << 20);
     while (!this->is_tx_ready() && spins++ < max_spins) {
-        asm volatile("pause");
+        arch::pause();
     }
 
     // Send a test byte in loopback mode and verify that we can read it back.
@@ -101,7 +101,7 @@ bool UART16550::init(uint32_t baud_rate) {
 
     spins = 0;
     while (!this->is_data_ready() && spins++ < max_spins) {
-        asm volatile("pause");
+        arch::pause();
     }
 
     if (this->read(DATA) != test_val) {
