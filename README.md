@@ -33,9 +33,10 @@ Standard presets using the host Clang compiler.
 
 ### GCC Presets
 Standard presets using a GCC Cross-Compiler.
-> **⚠️ Important Note:** To use these presets, you must compile and install a GCC cross-compiler for x86_64. The standard system GCC will not work.
+> **⚠️ Important Note:** To use these presets, you must compile and install a GCC cross-compiler for x86_64. The standard system GCC will not work. 
 > 
 > Please follow the instructions here: [OSDev Wiki: GCC Cross-Compiler](https://osdev.wiki/wiki/GCC_Cross-Compiler)
+> **PRECAUTION:** GCC presets are not compiling yet. **DO NOT USE THEM!**
 
 | Preset Name | Configuration Type |Description |
 | :--- | :--- | :--- |
@@ -96,8 +97,9 @@ We gratefully acknowledge the developers of the following third-party libraries 
 | :--- | :--- |
 | **Limine Bootloader** | https://codeberg.org/Limine/Limine | 
 | **LLVM C Library** | https://github.com/llvm/llvm-project |
+| **uACPI** | https://github.com/uACPI/uACPI |
 
 ## Licensing
 This project is Licensed under the **MIT License**. Please refer to the `LICENSE.md` file in the root directory for the full text.
 
-**Third Party Licenses:** This proejct incorporates or links against third-party software. These components are subject to their own respective licenses which can typically be found in their source repositories.
+**Third Party Licenses:** This project incorporates or links against third-party software. These components are subject to their own respective licenses which can typically be found in their source repositories.

@@ -1,87 +1,114 @@
-# Microkernel Development Roadmap
+# Roadmap (Current Status & Next Steps)
 
-This roadmap outlines the development stages for a 64-bit microkernel using the Limine bootloader. The architecture focuses on minimalism in Ring 0, delegating drivers and services to user space.
+This document tracks what is already implemented in the kernel and what is planned next, with an emphasis on scheduling, threads, processes, and IPC.
 
-## Phase 1: Bootstrapping & Infrastructure
-*Goal: Establish a build environment and get the CPU into a known state.*
+## Implemented
 
-- [X] **Toolchain Setup**
-    - [X] Build/Install Cross-Compiler (`x86_64-elf-gcc`, `ld`).
-    - [X] Configure `make` or `cmake` build system.
-- [X] **Limine Integration**
-    - [X] Configure `limine.cfg` (Limine protocol).
-- [X] **Kernel Entry**
-    - [X] Write `linker.ld` (Kernel logical address layout).
-    - [X] Implement `_start` in Assembly (Validate Limine handshake, setup stack).
-    - [X] Implement `kmain()` entry point.
-- [X] **Basic Output**
-    - [X] Initialize UART (COM1 at `0x3F8`) for serial logging.
-    - [X] Implement `printf` utilizing UART. Use LLVM-libc for baremetal environment?
+- **Boot & Arch Init**
+  - Limine bootloader integration and kernel entry in higher half.
+  - UART16550 serial console with logging backend and panic path.
+  - x86_64 CPU bootstrap: basic helpers, halt/pause/IF control.
 
-## Phase 2: Memory Management
-*Goal: Manage physical RAM and establish Virtual Memory for isolation.*
+- **Memory Management**
+  - Physical Memory Manager (PMM) with bitmap + summary bitmap + stack cache.
+  - Higher-half direct map (HHDM) and virtual memory manager (VMM).
+  - PageMap abstraction with:
+    - 4‑level (and optional 5‑level) paging.
+    - Large page support (2 MiB / 1 GiB when available).
+    - PCID-aware CR3 loading and TLB helpers.
+  - Kernel heap on top of VMM.
 
-- [X] **Physical Memory Manager (PMM)**
-    - [X] Parse Limine Memory Map (`limine_memmap_request`).
-    - [X] Implement Bitmap with Hot Cache stack for 4KiB page tracking.
-- [ ] **Virtual Memory Manager (VMM)**
-    - [X] Retrieve HHDM (Higher Half Direct Map) offset from Limine.
-    - [X] Implement x86_64 4-Level Paging (PML4, PDP, PD, PT). Support LA57?
-    - [X] Create `map` and `unmap` functions.
-    - [X] Bootstrap the Kernel Page Table (Higher Half mapping).
-- [X] **Kernel Heap**
-    - [X] Implement a Heap Allocator.
-    - [X] Expose `kmalloc` and `kfree`.
+- **CPU, GDT/TSS & Per‑CPU**
+  - Per‑CPU `CPUData` (GDT + TSS) and `PerCPUData` anchored via GS base.
+  - GDT setup for kernel/user code/data segments and 64‑bit TSS.
+  - TSS with IST stacks for NMI and double-fault, plus I/O bitmap.
+  - Per‑CPU initialization path (`CPUCoreManager::init_core`).
 
-## Phase 3: CPU & Interrupts
-*Goal: Handle hardware exceptions and hardware timers.*
+- **Interrupts & Exceptions**
+  - IDT setup:
+    - 256-entry IDT wired to common assembly stub (`idt.S`).
+    - Dedicated IST for NMI and double fault.
+  - TrapFrame definition and exception handler hand-off.
+  - InterruptDispatcher:
+    - Vector → handler table.
+    - Default fatal handler for exceptions, warning for unhandled IRQs.
+    - Spurious ACPI vector handling.
+  - Double-fault handler hook (`DFHandler`).
 
-- [X] **Global Descriptor Table (GDT)**
-    - [X] Construct GDT with Kernel/User Code & Data segments.
-    - [X] Setup TSS (Task State Segment) for interrupt stack switching.
-- [X] **Interrupt Descriptor Table (IDT)**
-    - [X] Define IDT structure.
-    - [X] Implement Assembly ISR stubs (Save/Restore registers).
-    - [X] Handle Critical Exceptions (`#GP`, `#PF`, `#DF`).
-- [ ] **Hardware Interrupts**
-    - [ ] Mask Legacy PIC (8259).
-    - [ ] Initialize LAPIC (Local APIC) per core.
-    - [ ] Calibrate APIC Timer for scheduling ticks.
+- **APIC & IOAPIC**
+  - Local APIC (LAPIC/x2APIC) abstraction:
+    - xAPIC vs x2APIC detection and init.
+    - IPI/broadcast IPI and INIT+SIPI for AP bring-up.
+    - LAPIC timer support (one-shot, periodic, TSC-deadline).
+    - Multi-source calibration (CPUID, HPET, PIT) with TSC scale.
+    - Calibrated `udelay`/`mdelay` and `get_ticks_ns()`.
+  - IOAPIC:
+    - Discovery from MADT, MMIO mapping, and GSI range tracking.
+    - Route/mask/unmask of GSIs.
+    - Legacy IRQ routing with ACPI ISO handling.
+  - Interrupt routing helpers:
+    - Legacy IRQ and PCI GSI mapping to vectors/CPUs via IOAPIC.
 
-## Phase 4: Microkernel Core (Scheduling & IPC)
-*Goal: The core logic allowing multiple tasks to exist and communicate.*
+- **Timers**
+  - PIT helper as conservative early/fallback timebase.
+  - HPET abstraction:
+    - ACPI HPET table parsing and MMIO mapping.
+    - Capability validation (vendor, period, ticking counter).
+    - Monotonic `get_ns()` and busy-wait `ndelay`/`udelay`/`mdelay`.
+    - One-shot and periodic timer configuration.
+  - High-level `Timer` facade:
+    - Policy: prefer calibrated LAPIC, then HPET, then PIT.
 
-- [ ] **Process/Thread Management**
-    - [ ] Define `TCB` (Thread Control Block) and `PCB` (Process Control Block).
-    - [ ] Implement Context Switching logic (Assembly: swap `rsp`, `cr3`, registers).
-- [ ] **Scheduler**
-    - [ ] Implement Round Robin scheduler hooked to APIC Timer.
-    - [ ] Implement Thread States (`READY`, `RUNNING`, `BLOCKED`).
-- [ ] **Inter-Process Communication (IPC)**
-    - [ ] **Message Passing:** Implement `send(pid, msg)` and `recv()`.
-    - [ ] **Ports:** Implement port-based addressing for services.
-    - [ ] **Optimization:** Implement Single-Copy or Zero-Copy (page mapping) for large messages.
+- **ACPI & Topology**
+  - ACPI bootstrap via uACPI with early table buffer.
+  - MADT parsing into linked lists:
+    - LAPIC, IOAPIC, ISO, x2APIC entries for later routing.
 
-## Phase 5: User Space Transition
-*Goal: Drop privileges and execute code in Ring 3.*
+- **I/O & Legacy Controllers**
+  - Port I/O helpers (`in`/`out`/`io_wait`).
+  - Legacy PIC (8259) remap and mask-all for IOAPIC-based systems.
 
-- [ ] **System Call Interface**
-    - [ ] Configure `MSR_LSTAR` for `syscall`/`sysret` instructions.
-    - [ ] Implement Syscall Dispatcher (Handler for IPC, Memory, Yield).
-- [ ] **ELF Loader**
-    - [ ] Parse ELF headers to load binaries into virtual memory.
-- [ ] **Ring 3 Entry**
-    - [ ] Craft the initial User Stack.
-    - [ ] Execute `sysret` or `iretq` to jump to User Entry point.
+## In Progress / Planned
 
-## Phase 6: User Space Services
-*Goal: Move traditional kernel functions out of Ring 0.*
+- **Scheduling & Threads**
+  - Introduce a `TCB` (Thread Control Block) type:
+    - Saved register state, stack pointer, and per-thread metadata.
+  - Implement a minimal scheduler:
+    - Initially round-robin or simple priority.
+    - Tied to LAPIC timer ticks (periodic interrupts).
+    - Integrate with `IrqStatus::Reschedule` from interrupt handlers.
 
-- [ ] **Init Process**
-    - [ ] Load an `init` binary from Limine Modules (Ramdisk).
-- [ ] **VFS Server**
-    - [ ] Implement a file system server in user space.
-    - [ ] Implement `open`, `read`, `write` via IPC.
-- [ ] **Drivers**
-    - [ ] Implement I/O port whitelisting (Bitmap in TSS or syscall).
-    - [ ] Create a basic user-mode keyboard driver.
+- **Processes & Address Spaces**
+  - Define `PCB` (Process Control Block):
+    - Owns a `PageMap` (CR3), list of threads, and resources.
+  - Per-process address spaces:
+    - Use existing `PageMap::create_new` to fork user/kernel halves.
+  - Basic process lifecycle:
+    - Create, exec/load ELF into user space, and destroy.
+
+- **Syscalls & User Mode**
+  - System call entry:
+    - Configure `MSR_LSTAR` and friends for `syscall/sysret`.
+    - Trap into a syscall dispatcher in kernel space.
+  - Core syscall set:
+    - Yield/sleep, memory map/unmap, and IPC primitives.
+  - Transition to Ring 3:
+    - Build initial user stack and jump via `sysret` or `iretq`.
+
+- **IPC (Inter-Process Communication)**
+  - Message-passing primitives:
+    - `send(pid, msg)` and `recv()` with blocking semantics.
+  - Port or endpoint abstraction:
+    - Named or capability-based channels for system services.
+  - Optimization:
+    - Large-message support via page remapping (zero-copy IPC).
+
+- **User-Space Services**
+  - Init process:
+    - Launched from a Limine module or ramdisk.
+  - User-space drivers:
+    - Keyboard and other simple devices using I/O-port whitelisting.
+  - VFS service:
+    - User-space file system server and basic file syscalls over IPC.
+
+This roadmap will evolve as core kernel primitives (scheduling, processes, IPC) solidify and more functionality migrates out of Ring 0 into user-space services.
