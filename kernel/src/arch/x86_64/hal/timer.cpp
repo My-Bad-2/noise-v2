@@ -1,19 +1,29 @@
 #include "hal/timer.hpp"
-#include <cstdint>
+#include "hal/pit.hpp"
+#include "hal/lapic.hpp"
 
 namespace kernel::hal {
-namespace {
-/**
- * @brief Read the current timestamp counter (TSC).
- *
- * This provides a raw cycle counter used by timing and calibration
- * code. It is intentionally minimal and architecture-specific; higher
- * layers should interpret the result in terms of calibrated units.
- */
-size_t rdtsc() {
-    uint32_t lo, hi;
-    asm volatile("rdtsc" : "=a"(lo), "=d"(hi));
-    return (static_cast<size_t>(hi) << 32) | lo;
+void Timer::udelay(uint32_t us) {
+    if (Lapic::is_ready()) {
+        Lapic::udelay(us);
+    } else {
+        PIT::udelay(us);
+    }
 }
-}  // namespace
+
+void Timer::mdelay(uint32_t ms) {
+    if (Lapic::is_ready()) {
+        Lapic::mdelay(ms);
+    } else {
+        PIT::mdelay(ms);
+    }
+}
+
+size_t Timer::get_ticks_ns() {
+    if (Lapic::is_ready()) {
+        return Lapic::get_ticks_ns();
+    }
+
+    return 0;
+}
 }  // namespace kernel::hal

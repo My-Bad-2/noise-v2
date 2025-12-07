@@ -63,4 +63,5 @@ void pause();
 
 void disable_interrupts();
 void enable_interrupts();
+bool interrupt_status();
 }  // namespace kernel::arch

@@ -15,6 +15,7 @@
 #include "cpu/idt.hpp"
 #include "hal/handlers/df.hpp"
 #include "hal/pic.hpp"
+#include "hal/pit.hpp"
 
 namespace kernel::arch {
 namespace {
@@ -30,6 +31,7 @@ void initialize_interrupt_subsystem() {
 void init() {
     // Architecture-specific initialization hook.
     initialize_interrupt_subsystem();
+    hal::PIT::init(1000);
 }
 
 hal::IUART* get_kconsole() {
@@ -64,6 +66,11 @@ void enable_interrupts() {
     asm volatile("sti");
 }
 
+bool interrupt_status() {
+    uint64_t rflags = 0;
+    asm volatile("pushfq; pop %0" : "=r"(rflags));
+    return rflags & 0x200;
+}
 }  // namespace kernel::arch
 
 extern "C" void exception_handler(kernel::cpu::arch::TrapFrame* frame) {

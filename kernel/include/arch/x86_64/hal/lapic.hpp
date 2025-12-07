@@ -25,9 +25,15 @@ class Lapic {
     static void arm_ts_deadline(uint64_t target_tsc);
     static void stop_timer();
 
-    static void calibrate(uint32_t measured_ticks);
+    static void calibrate();
     static void udelay(uint32_t us);
     static void mdelay(uint32_t ms);
+
+    static bool is_ready() {
+        return is_calibrated;
+    }
+
+    static uint64_t get_ticks_ns();
 
    private:
     static uint32_t read(uint32_t offset);
@@ -41,5 +47,6 @@ class Lapic {
 
     static uint32_t ticks_per_ms;
     static uint32_t ticks_per_us;
+    static size_t tsc_per_ms;
 };
 }  // namespace kernel::hal

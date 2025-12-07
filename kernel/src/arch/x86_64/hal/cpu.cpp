@@ -53,6 +53,7 @@ void arch::CPUData::init(CPUData* arch, uint64_t stack_top) {
     GDTManager::setup_tss(arch, stack_top);
 
     hal::Lapic::init();
+    hal::Lapic::calibrate();
 }
 
 void arch::CPUData::commit_state(PerCPUData* cpu) {
