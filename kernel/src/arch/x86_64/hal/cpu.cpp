@@ -6,13 +6,14 @@
 #include "cpu/registers.hpp"
 #include "cpu/regs.h"
 #include "hal/lapic.hpp"
+#include "cpu/simd.hpp"
 
-#define STACK_SIZE 0x2000
+#define STACK_SIZE memory::PAGE_SIZE_4K
 
 namespace kernel::cpu {
 namespace {
-uint8_t* nmi_stack          = nullptr;
-uint8_t* double_fault_stack = nullptr;
+std::byte* nmi_stack          = nullptr;
+std::byte* double_fault_stack = nullptr;
 }  // namespace
 
 void CPUCoreManager::allow_io_port(PerCPUData* cpu, uint16_t port, bool enable) {
@@ -37,13 +38,13 @@ void arch::CPUData::init(CPUData* arch, uint64_t stack_top) {
     if (nmi_stack == nullptr) {
         // Dedicated IST stack for NMIs to avoid clobbering arbitrary stacks
         // during asynchronous events.
-        nmi_stack = new uint8_t[STACK_SIZE];
+        nmi_stack = new std::byte[STACK_SIZE];
     }
 
     if (double_fault_stack == nullptr) {
         // Dedicated IST stack for double faults; this is critical because
         // double faults often arise from stack corruption/overflow.
-        double_fault_stack = new uint8_t[STACK_SIZE];
+        double_fault_stack = new std::byte[STACK_SIZE];
     }
 
     arch->tss_block.header.ist[0] = reinterpret_cast<uintptr_t>(nmi_stack) + STACK_SIZE;
@@ -54,6 +55,7 @@ void arch::CPUData::init(CPUData* arch, uint64_t stack_top) {
 
     hal::Lapic::init();
     hal::Lapic::calibrate();
+    SIMD::init();
 }
 
 void arch::CPUData::commit_state(PerCPUData* cpu) {

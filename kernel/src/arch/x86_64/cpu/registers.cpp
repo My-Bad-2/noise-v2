@@ -3,19 +3,19 @@
 namespace kernel::arch {
 Cr0 Cr0::read() {
     Cr0 cr0;
-    // Read the full CR0 value; callers can interpret via bitfields.
+    // Snapshot full CR0; callers interpret bits via the struct view.
     asm volatile("mov %%cr0, %0" : "=r"(cr0.raw));
     return cr0;
 }
 
 void Cr0::write() {
-    // Write back CR0; typically used to enable paging or WP.
+    // Commit CR0 changes (paging/WP etc.) in one shot.
     asm volatile("mov %0, %%cr0" ::"r"(raw) : "memory");
 }
 
 Cr2 Cr2::read() {
     Cr2 cr2;
-    // Snapshot the last faulting linear address for diagnostics.
+    // Capture last faulting linear address for page-fault diagnostics.
     asm volatile("mov %%cr2, %0" : "=r"(cr2.linear_address));
     return cr2;
 }
@@ -66,5 +66,37 @@ void Msr::write() {
     uint32_t high = this->value >> 32;
 
     asm volatile("wrmsr" ::"c"(this->index), "a"(low), "d"(high));
+}
+
+Mxcsr Mxcsr::read() {
+    Mxcsr mxcsr;
+    asm volatile("stmxcsr %0" : "=m"(mxcsr.raw));
+    return mxcsr;
+}
+
+void Mxcsr::write() {
+    asm volatile("ldmxcsr %0" ::"m"(raw));
+}
+
+/**
+ * Write to XCR0 using 'xsetbv'.
+ *
+ * WARNING:
+ *  - Requires enabling XSAVE in CR4 (CR4.OSXSAVE) and checking that the
+ *    requested state components are permitted by CPUID; otherwise this
+ *    raises #UD or #GP.
+ */
+void Xcr0::write() {
+    uint32_t eax = raw & 0xFFFFFFFF;
+    uint32_t edx = raw >> 32;
+    asm volatile("xsetbv" ::"a"(eax), "d"(edx), "c"(0) : "memory");
+}
+
+Xcr0 Xcr0::read() {
+    Xcr0 xcr0;
+    uint32_t eax, edx;
+    asm volatile("xgetbv" : "=a"(eax), "=d"(edx) : "c"(0));
+    xcr0.raw = (static_cast<uint64_t>(edx) << 32) | eax;
+    return xcr0;
 }
 }  // namespace kernel::arch
