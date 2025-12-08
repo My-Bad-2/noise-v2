@@ -101,8 +101,8 @@ void GDTManager::load_tables(CPUData* cpu) {
     // Index 5 * 8 = 0x28
     asm volatile("mov $0x28, %%ax; ltr %%ax" ::: "ax");
 
-    LOG_INFO("GDT: loaded per-CPU tables gdt=0x%lx tss=0x%lx",
-             gdtr.base, reinterpret_cast<uint64_t>(&cpu->tss_block));
+    LOG_INFO("GDT: loaded per-CPU tables gdt=0x%lx tss=0x%lx", gdtr.base,
+             reinterpret_cast<uint64_t>(&cpu->tss_block));
 }
 
 void GDTManager::set_io_perm(arch::CPUData* arch, uint16_t port, bool enable) {

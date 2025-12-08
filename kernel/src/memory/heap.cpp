@@ -9,7 +9,6 @@
 #define likely(x)   __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
-// NOLINTBEGIN(performance-no-int-to-ptr)
 namespace kernel::memory {
 namespace {
 KernelHeap kheap;
@@ -243,7 +242,7 @@ void KernelHeap::free(void* ptr) {
     BlockHeader* header =
         reinterpret_cast<BlockHeader*>(reinterpret_cast<char*>(ptr) - sizeof(BlockHeader));
 
-    // Basic sanity check: if the magic doesn't match, we ignore the 
+    // Basic sanity check: if the magic doesn't match, we ignore the
     // free. This avoids crashing on double-frees or foreign pointers
     // but also hides bugs.
     if (unlikely(header->magic != BLOCK_MAGIC)) {
@@ -310,4 +309,3 @@ void aligned_kfree(void* ptr) {
     kheap.free(raw_ptr);
 }
 }  // namespace kernel::memory
-// NOLINTEND(performance-no-int-to-ptr)

@@ -7,7 +7,7 @@
 
 namespace kernel::hal {
 uint8_t* ACPI::early_tbl_buff = nullptr;
-acpi_fadt* ACPI::fadt = nullptr;
+acpi_fadt* ACPI::fadt         = nullptr;
 
 void ACPI::bootstrap() {
     // The early table buffer is a scratch area that uACPI uses before the

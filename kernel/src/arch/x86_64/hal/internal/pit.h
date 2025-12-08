@@ -42,7 +42,7 @@
 #define CMD_CHANNEL2 0x80
 #define CMD_CHANNEL3 0xc0
 
-#define CMD_LATCH 0x00
+#define CMD_LATCH     0x00
 #define CMD_ACCESS_LO 0x10
 #define CMD_ACCESS_HI 0x20
 #define CMD_ACCESS_LH 0x30

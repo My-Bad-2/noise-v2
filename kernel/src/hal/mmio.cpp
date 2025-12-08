@@ -18,8 +18,8 @@ MMIORegion::MMIORegion(uintptr_t phys_addr, size_t size, memory::CacheType cache
     this->page_base = VirtualManager::reserve_mmio(this->mapped_size, PAGE_SIZE_4K);
 
     if (!this->page_base) {
-        LOG_ERROR("MMIO: failed to reserve virtual space for phys=0x%lx size=0x%zx",
-                  phys_addr, size);
+        LOG_ERROR("MMIO: failed to reserve virtual space for phys=0x%lx size=0x%zx", phys_addr,
+                  size);
         return;
     }
 
@@ -34,8 +34,7 @@ MMIORegion::MMIORegion(uintptr_t phys_addr, size_t size, memory::CacheType cache
     }
 
     this->virt_base = reinterpret_cast<uintptr_t>(this->page_base) + offset;
-    LOG_INFO("MMIO: mapped phys=0x%lx size=0x%zx at virt=0x%lx",
-             phys_addr, size, this->virt_base);
+    LOG_INFO("MMIO: mapped phys=0x%lx size=0x%zx at virt=0x%lx", phys_addr, size, this->virt_base);
 }
 
 // MMIORegion::~MMIORegion() {

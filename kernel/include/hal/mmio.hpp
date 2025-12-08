@@ -35,12 +35,12 @@ class MMIORegion {
         return *addr;
     }
 
-    template<typename T>
+    template <typename T>
     void write_at(size_t index, T val) {
         write<T>(index * sizeof(T), val);
     }
 
-    template<typename T>
+    template <typename T>
     T read_at(size_t index) {
         return read<T>(index * sizeof(T));
     }

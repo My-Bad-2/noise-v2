@@ -59,7 +59,7 @@ volatile struct limine_stack_size_request stack_size_request = {
 
 [[gnu::section(".requests")]]
 volatile struct limine_rsdp_request rsdp_request = {
-    .id = LIMINE_RSDP_REQUEST_ID,
+    .id       = LIMINE_RSDP_REQUEST_ID,
     .revision = 0,
     .response = nullptr,
 };

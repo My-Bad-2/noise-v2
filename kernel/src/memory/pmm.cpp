@@ -20,8 +20,6 @@
 #include "libs/math.hpp"
 #include <string.h>
 
-// Don't tell me what affects performance and what doesn't
-// NOLINTBEGIN(performance-no-int-to-ptr)
 namespace kernel::memory {
 namespace {
 
@@ -637,5 +635,3 @@ void PhysicalManager::init() {
 }
 
 }  // namespace kernel::memory
-
-// NOLINTEND(performance-no-int-to-ptr)

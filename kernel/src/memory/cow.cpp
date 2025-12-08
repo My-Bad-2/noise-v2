@@ -47,7 +47,7 @@ void CowManager::init() {
 
     // Map zero page into higher half once and clear it.
     // All CoW mappings will refer to this same backing frame.
-    void* virt = to_higher_half(reinterpret_cast<void*>(zero_page_phys));  // NOLINT
+    void* virt = to_higher_half(reinterpret_cast<void*>(zero_page_phys));
     memset(virt, 0, PAGE_SIZE_4K);
 
     LOG_INFO("CoW: zero page initialized at phys=0x%lx", zero_page_phys);
@@ -99,7 +99,7 @@ bool CowManager::handle_fault(uintptr_t virt_addr, PageMap* map) {
 
     // Map new physical frame in higher half and copy contents.
     // Currently we know the old page is all-zero, so we just memset.
-    void* new_virt = reinterpret_cast<void*>(to_higher_half(new_phys));  // NOLINT
+    void* new_virt = reinterpret_cast<void*>(to_higher_half(new_phys));
     memset(new_virt, 0, PAGE_SIZE_4K);
 
     // Rebuild PTE flags from the existing mapping:

@@ -37,7 +37,6 @@ void InterruptDispatcher::map_pci_irq(uint32_t gsi, uint8_t vector, IInterruptHa
     LOG_INFO("IDT: mapped PCI GSI %u -> vector %u CPU %u", gsi, vector, dest_cpu);
 }
 
-// NOLINTNEXTLINE
 void InterruptDispatcher::map_legacy_irq(uint8_t irq, uint8_t vector, IInterruptHandler* handler,
                                          uint32_t dest_cpu) {
     register_handler(vector, handler);

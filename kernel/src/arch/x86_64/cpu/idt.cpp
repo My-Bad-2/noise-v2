@@ -16,10 +16,9 @@ extern "C" uintptr_t interrupt_stub_table[];
 
 namespace kernel::cpu::arch {
 IDTEntry* IDTManager::idt = nullptr;
-IDTR IDTManager::idtr = {};
+IDTR IDTManager::idtr     = {};
 
 void IDTManager::setup_idt() {
-    // NOLINTNEXTLINE
     auto encode_gate = [&](int interrupt, uint64_t base, uint16_t selector, uint8_t flags,
                            uint8_t ist) {
         idt[interrupt].offset_low    = base & 0xFFFF;
@@ -60,7 +59,6 @@ void IDTManager::setup_idt() {
 
 void IDTManager::load_table() {
     asm volatile("lidt %0" ::"m"(idtr));
-    LOG_INFO("IDT: loaded table base=0x%lx limit=0x%x",
-             idtr.base, idtr.limit);
+    LOG_INFO("IDT: loaded table base=0x%lx limit=0x%x", idtr.base, idtr.limit);
 }
 }  // namespace kernel::cpu::arch

@@ -31,7 +31,7 @@ inline void xsaveopt(void* buffer) {
 }
 }  // namespace
 
-FpuMode SIMD::mode = None;
+FpuMode SIMD::mode       = None;
 uint32_t SIMD::save_size = 0;
 
 void SIMD::init() {
@@ -50,7 +50,7 @@ void SIMD::init() {
         cr4.write();
 
         Mxcsr mxcsr;
-        mxcsr.raw = 0;
+        mxcsr.raw                    = 0;
         mxcsr.invalid_operation_mask = true;
         mxcsr.denormal_mask          = true;
         mxcsr.divide_by_zero_mask    = true;

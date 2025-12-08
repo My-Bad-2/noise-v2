@@ -38,7 +38,7 @@ void PIT::set_frequency(uint32_t frequency) {
 }
 
 void PIT::prepare_wait(uint16_t) {
-    uint8_t cmd    = CMD_CHANNEL2 | CMD_ACCESS_LH | CMD_MODE0;
+    uint8_t cmd = CMD_CHANNEL2 | CMD_ACCESS_LH | CMD_MODE0;
 
     out<uint8_t>(PORT_COMMAND, cmd);
 

@@ -97,13 +97,13 @@ class GDTManager {
    public:
     /// Initialize TSS stack pointers and I/O bitmap for a CPU.
     static void setup_tss(CPUData* cpu, uint64_t stack_top);
-    
+
     /// Populate the per‑CPU GDT entries, including TSS descriptor.
     static void setup_gdt(CPUData* cpu);
-    
+
     /// Load GDTR and TR for this CPU (segment state is refreshed in asm stub).
     static void load_tables(CPUData* cpu);
-    
+
     /// Enable/disable access to an I/O port in the TSS I/O bitmap.
     static void set_io_perm(CPUData* arch, uint16_t port, bool enable);
 };

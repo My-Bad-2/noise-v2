@@ -41,7 +41,6 @@ template <typename T>
 inline T in(uint16_t port) {
     T ret = 0;
 
-    // NOLINTBEGIN
     // Ignore `bugprone-branch-clone` check: the pattern is intentional.
     if constexpr (std::same_as<T, uint8_t>) {
         asm volatile("inb %1, %0" : "=a"(ret) : "Nd"(port));
@@ -52,7 +51,6 @@ inline T in(uint16_t port) {
     } else {
         static_assert(false, "Unsupported type size for kernel::hal::in() operation.");
     }
-    // NOLINTEND
 
     return ret;
 }
@@ -71,7 +69,6 @@ inline T in(uint16_t port) {
 template <typename T>
     requires(sizeof(T) <= sizeof(uint32_t))
 inline void out(uint16_t port, T value) {
-    // NOLINTBEGIN
     // Ignore `bugprone-branch-clone` check: the pattern is intentional.
     if constexpr (std::same_as<T, uint8_t>) {
         asm volatile("outb %0, %1" ::"a"(value), "Nd"(port));
@@ -82,7 +79,6 @@ inline void out(uint16_t port, T value) {
     } else {
         static_assert(false, "Unsupported type size for kernel::hal::out() operation.");
     }
-    // NOLINTEND
 }
 
 /**

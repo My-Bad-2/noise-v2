@@ -1,5 +1,3 @@
-#include "cpu/regs.h"
-
 .section .text
 .extern exception_handler
 .type interrupt_common_stub, @function
@@ -47,7 +45,7 @@ interrupt_common_stub:
     movq %rsp, %rdi
 
     # We check the Code Segment (CS) saved on the stack to see if we came from User Mode.
-    movq IFRAME_OFFSET_CS(%rsp), %rax
+    movq 144(%rsp), %rax
     testb $3, %al        # Check bottom 2 bits (RPL). If != 0, it's User Mode.
     jz 1f
     swapgs               # Switch GS to Kernel Per-CPU Data
@@ -55,7 +53,7 @@ interrupt_common_stub:
     call exception_handler
 
     # Check CS again to see if we are returning to User Mode
-    movq IFRAME_OFFSET_CS(%rsp), %rax
+    movq 144(%rsp), %rax
     testb $3, %al
     jz 2f
     swapgs               # Switch GS back to User TLS

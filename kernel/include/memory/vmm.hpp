@@ -180,7 +180,8 @@ class VirtualManager {
      * Tears down mappings (optionally freeing physical pages) and
      * returns the virtual range to the allocator.
      */
-    static void free(void* ptr, size_t count, PageSize size = PageSize::Size4K, bool free_phys = true);
+    static void free(void* ptr, size_t count, PageSize size = PageSize::Size4K,
+                     bool free_phys = true);
 
     /**
      * @brief Reserve virtual address space for MMIO mappings.

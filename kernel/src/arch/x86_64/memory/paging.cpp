@@ -16,8 +16,6 @@
 #define PAT_TYPE_WB  0x06ULL  // Write-Back
 #define PAT_TYPE_UC_ 0x07ULL  // Uncached (Weak)
 
-// NOLINTBEGIN(performance-no-int-to-ptr)
-// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 namespace kernel::memory {
 bool TLB::has_invpcid = false;
 namespace {
@@ -686,5 +684,3 @@ uint8_t PageMap::get_protection_key(uintptr_t virt_addr, PageSize size) {
     return static_cast<uint8_t>((entry >> 59) & 0xF);
 }
 }  // namespace kernel::memory
-// NOLINTEND(bugprone-easily-swappable-parameters)
-// NOLINTEND(performance-no-int-to-ptr)

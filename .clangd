@@ -10,7 +10,7 @@ Diagnostics:
   
   ClangTidy:
     Remove:
-      - "modernize-use-trailing-return-type" # Too noisy
+      - "*" # Too noisy
 
 InlayHints:
   Enabled: Yes

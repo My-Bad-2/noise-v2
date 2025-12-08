@@ -7,7 +7,6 @@
 #include "memory/pmm.hpp"
 #include "memory/vmm.hpp"
 
-// NOLINTBEGIN(performance-no-int-to-ptr)
 namespace kernel::memory {
 namespace {
 // Global kernel page map used as the bootstrap address space.
@@ -368,7 +367,7 @@ void VirtualAllocator::init(uintptr_t start, size_t length) {
     if (!this->region_head) {
         PANIC("VirtualAllocator: failed to initialize region head");
     }
-    
+
     this->region_head->start  = start;
     this->region_head->length = length;
     this->region_head->next   = nullptr;
@@ -487,4 +486,3 @@ void* VirtualManager::reserve_mmio(size_t size, size_t align) {
     return reinterpret_cast<void*>(addr);
 }
 }  // namespace kernel::memory
-// NOLINTEND(performance-no-int-to-ptr)

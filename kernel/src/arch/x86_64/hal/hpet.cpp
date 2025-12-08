@@ -146,10 +146,10 @@ void HPET::ndelay(size_t ns) {
         return;
     }
 
-    size_t start                = read_counter();
-    unsigned __int128 total_fs  = static_cast<unsigned __int128>(ns) * 1000000;  // ns -> fs
-    size_t ticks_needed         = static_cast<size_t>(total_fs / period_fs);
-    size_t target               = start + ticks_needed;
+    size_t start               = read_counter();
+    unsigned __int128 total_fs = static_cast<unsigned __int128>(ns) * 1000000;  // ns -> fs
+    size_t ticks_needed        = static_cast<size_t>(total_fs / period_fs);
+    size_t target              = start + ticks_needed;
 
     // Busy-wait until the main counter reaches the target. We compare
     // against `target` rather than just `ticks_needed` to handle the

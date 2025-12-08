@@ -22,7 +22,7 @@ enum class IrqStatus : uint8_t { Handled, Unhandled, Reschedule };
  */
 class IInterruptHandler {
    public:
-    virtual ~IInterruptHandler()                      = default;
+    virtual ~IInterruptHandler()                     = default;
     virtual IrqStatus handle(arch::TrapFrame* frame) = 0;
     virtual const char* name() const                 = 0;
 };
