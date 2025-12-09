@@ -20,14 +20,14 @@ class UacpiIrqAdapter : public IInterruptHandler {
 
     virtual ~UacpiIrqAdapter() = default;
 
-    IrqStatus handle(arch::TrapFrame*) override {
+    std::pair<IrqStatus, arch::TrapFrame*> handle(arch::TrapFrame* frame) override {
         uacpi_interrupt_ret ret = this->handler(this->context);
 
         if (ret == UACPI_INTERRUPT_HANDLED) {
-            return IrqStatus::Handled;
-        } else {
-            return IrqStatus::Unhandled;
+            return std::make_pair(IrqStatus::Handled, frame);
         }
+        
+        return std::make_pair(IrqStatus::Unhandled, frame);
     }
 
     const char* name() const override {

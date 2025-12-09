@@ -51,6 +51,7 @@ interrupt_common_stub:
     swapgs               # Switch GS to Kernel Per-CPU Data
 1:
     call exception_handler
+    movq %rax, %rsp
 
     # Check CS again to see if we are returning to User Mode
     movq 144(%rsp), %rax

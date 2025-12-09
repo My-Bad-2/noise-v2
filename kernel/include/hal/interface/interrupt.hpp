@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdint>
+#include <utility>
 #include "cpu/exception.hpp"
 
 namespace kernel::cpu {
@@ -23,7 +23,7 @@ enum class IrqStatus : uint8_t { Handled, Unhandled, Reschedule };
 class IInterruptHandler {
    public:
     virtual ~IInterruptHandler()                     = default;
-    virtual IrqStatus handle(arch::TrapFrame* frame) = 0;
+    virtual std::pair<IrqStatus, arch::TrapFrame*> handle(arch::TrapFrame* frame) = 0;
     virtual const char* name() const                 = 0;
 };
 }  // namespace kernel::cpu

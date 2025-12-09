@@ -10,6 +10,6 @@ class DFHandler : public cpu::IInterruptHandler {
         return "Double Fault";
     }
 
-    cpu::IrqStatus handle(cpu::arch::TrapFrame* frame) override;
+    std::pair<cpu::IrqStatus, cpu::arch::TrapFrame*> handle(cpu::arch::TrapFrame* frame) override;
 };
 }  // namespace kernel::arch::handlers
