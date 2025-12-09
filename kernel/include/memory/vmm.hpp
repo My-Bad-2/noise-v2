@@ -191,6 +191,8 @@ class VirtualManager {
      * is managed here.
      */
     static void* reserve_mmio(size_t size, size_t align);
+
+    static PageMap* curr_map();
 };
 
 class CowManager {

@@ -74,7 +74,12 @@ TrapFrame* InterruptDispatcher::dispatch(TrapFrame* frame) {
     if (handlers[vector]) {
         auto [status, ret] = handlers[vector]->handle(frame);
 
+        if (status == IrqStatus::Unhandled) {
+            PANIC("IDT: vector %u was unhandled on CPU %u", vector, cpu->cpu_id);
+        }
+
         frame = ret;
+
         if (status == IrqStatus::Reschedule) {
             // If a driver is unblocked by this IRQ, the scheduler will be
             // invoked to pick a better runnable task. The actual scheduling

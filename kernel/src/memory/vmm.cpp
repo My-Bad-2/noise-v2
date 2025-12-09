@@ -185,6 +185,11 @@ PageMap* PageMap::get_kernel_map() {
     return &kernel_pagemap;
 }
 
+// For now point to kernel map, later change it to use the process
+PageMap* VirtualManager::curr_map() {
+    return &kernel_pagemap;
+}
+
 void VirtualAllocator::expand_pool() {
     // Grow the node pool by allocating one physical page and treating it
     // as an array of `VmFreeRegion` nodes. Nodes are then threaded into
@@ -415,21 +420,21 @@ void* VirtualManager::allocate(size_t count, PageSize size, uint8_t flags, Cache
         size_t total_pages  = total_bytes / PAGE_SIZE_4K;
 
         for (size_t i = 0; i < total_pages; ++i) {
-            kernel_pagemap.map(virt_addr + (i * PAGE_SIZE_4K), zero_page, flags, cache,
+            curr_map()->map(virt_addr + (i * PAGE_SIZE_4K), zero_page, flags, cache,
                                PageSize::Size4K, 0, false);
         }
 
-        kernel_pagemap.load();
+        curr_map()->load();
     } else {
         uintptr_t curr_virt = virt_addr;
 
         // Then back each page with physical memory via the kernel page map.
         for (size_t i = 0; i < count; ++i) {
-            if (!kernel_pagemap.map(curr_virt, flags, cache, size)) {
+            if (!curr_map()->map(curr_virt, flags, cache, size)) {
                 // Roll back any mappings we already created.
                 for (size_t j = 0; j < i; ++j) {
                     uintptr_t addr = virt_addr + (j * step_bytes);
-                    kernel_pagemap.unmap(addr, 0, true);
+                    curr_map()->unmap(addr, 0, true);
                 }
 
                 virt_allocator.free_region(virt_addr, total_bytes);
@@ -468,7 +473,7 @@ void VirtualManager::free(void* ptr, size_t count, PageSize size, bool free_phys
     // Tear down mappings and free backing physical pages.
     for (size_t i = 0; i < count; ++i) {
         uintptr_t addr = virt_addr + (i * step_bytes);
-        kernel_pagemap.unmap(addr, 0, free_phys);
+        curr_map()->unmap(addr, 0, free_phys);
     }
 
     // Return the virtual range to the allocator for reuse.

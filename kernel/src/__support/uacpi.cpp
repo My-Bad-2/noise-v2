@@ -21,7 +21,7 @@ uacpi_status uacpi_kernel_get_rsdp(uacpi_phys_addr* out_rsdp_address) {
     }
 
     uintptr_t rsdp_virt_addr = reinterpret_cast<uintptr_t>(rsdp_request.response->address);
-    uintptr_t rspd_phys_addr = PageMap::get_kernel_map()->translate(rsdp_virt_addr);
+    uintptr_t rspd_phys_addr = VirtualManager::curr_map()->translate(rsdp_virt_addr);
 
     *out_rsdp_address = rspd_phys_addr;
     return UACPI_STATUS_OK;
@@ -48,7 +48,7 @@ void* uacpi_kernel_map(uacpi_phys_addr addr, uacpi_size len) {
     uint8_t flags   = Read | Write | Global;
 
     for (size_t i = 0; i < total_size; i += PAGE_SIZE_4K) {
-        if (!PageMap::get_kernel_map()->map(reinterpret_cast<uintptr_t>(vmm_base_virt_addr) + i,
+        if (!VirtualManager::curr_map()->map(reinterpret_cast<uintptr_t>(vmm_base_virt_addr) + i,
                                             aligned_addr + i, flags, cache, PageSize::Size4K)) {
             PANIC("Failed to Map UACPI address 0x%lx -> %p", aligned_addr, vmm_base_virt_addr);
         }
@@ -71,7 +71,7 @@ void uacpi_kernel_unmap(void* addr, uacpi_size len) {
     uacpi_size total_size   = len + offset;
 
     for (size_t i = 0; i < total_size; i += PAGE_SIZE_4K) {
-        PageMap::get_kernel_map()->unmap(virt_addr + i);
+        VirtualManager::curr_map()->unmap(virt_addr + i);
     }
 }
 
