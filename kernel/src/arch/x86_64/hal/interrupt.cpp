@@ -59,47 +59,42 @@ void InterruptDispatcher::unmap_pci_irq(uint32_t gsi, uint8_t vector) {
     LOG_INFO("IDT: unmapped PCI GSI %u from vector %u", gsi, vector);
 }
 
-TrapFrame* InterruptDispatcher::dispatch(TrapFrame* frame) {
+void InterruptDispatcher::dispatch(TrapFrame* frame) {
     uint8_t vector = static_cast<uint8_t>(frame->vector);
 
     // ACPI spurious interrupts (often vector 0xFF) are ignored by design:
     // they signal an edge that did not correspond to a real device event.
     if (vector == ACPI_SPURIOUS_VECTOR) {
         LOG_DEBUG("IDT: spurious interrupt on vector 0x%02x ignored", vector);
-        return frame;
+        return;
     }
 
     PerCPUData* cpu = CPUCoreManager::get_curr_cpu();
 
     if (handlers[vector]) {
-        auto [status, ret] = handlers[vector]->handle(frame);
+        IrqStatus status = handlers[vector]->handle(frame);
 
         if (status == IrqStatus::Unhandled) {
             PANIC("IDT: vector %u was unhandled on CPU %u", vector, cpu->cpu_id);
         }
-
-        frame = ret;
 
         if (status == IrqStatus::Reschedule) {
             // If a driver is unblocked by this IRQ, the scheduler will be
             // invoked to pick a better runnable task. The actual scheduling
             // hook is left as a TODO to keep this layer scheduler-agnostic.
             LOG_DEBUG("IDT: vector %u requested reschedule on CPU %u", vector, cpu->cpu_id);
-            return frame;
         }
     } else {
-        frame = default_handler(frame, cpu->cpu_id);
+        default_handler(frame, cpu->cpu_id);
     }
 
     // EOIs are only sent for external/IRQ vectors, not for CPU exceptions.
     if (vector >= PLATFORM_INTERRUPT_BASE) {
         hal::Lapic::send_eoi();
     }
-
-    return frame;
 }
 
-TrapFrame* InterruptDispatcher::default_handler(TrapFrame* frame, uint32_t cpu_id) {
+void InterruptDispatcher::default_handler(TrapFrame* frame, uint32_t cpu_id) {
     if (frame->vector < PLATFORM_INTERRUPT_BASE) {
         // Exceptions without explicit handlers are treated as fatal; the
         // kernel cannot safely continue from an unknown fault.

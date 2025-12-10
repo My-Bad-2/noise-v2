@@ -6,7 +6,7 @@
 #include "cpu/registers.hpp"
 
 namespace kernel::arch::handlers {
-std::pair<cpu::IrqStatus, cpu::arch::TrapFrame*> DFHandler::handle(cpu::arch::TrapFrame* frame) {
+cpu::IrqStatus DFHandler::handle(cpu::arch::TrapFrame* frame) {
     // Double faults are almost always unrecoverable, usually indicating
     // stack corruption or a nested exception failure. We halt immediately.
     disable_interrupts();
@@ -22,6 +22,6 @@ std::pair<cpu::IrqStatus, cpu::arch::TrapFrame*> DFHandler::handle(cpu::arch::Tr
     LOG_ERROR("RBP: 0x%lx  CR2: 0x%lx", frame->rbp, cr2.linear_address);
 
     PANIC("System Halted.");
-    return std::make_pair(cpu::IrqStatus::Handled, frame);
+    return cpu::IrqStatus::Handled;
 }
 }  // namespace kernel::arch::handlers

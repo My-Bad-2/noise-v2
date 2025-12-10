@@ -28,7 +28,7 @@ class InterruptDispatcher {
     static void unregister_handler(uint8_t vector);
 
     /// Dispatch an interrupt to the appropriate handler based on vector.
-    static TrapFrame* dispatch(TrapFrame* frame);
+    static void dispatch(TrapFrame* frame);
 
     /**
      * @brief Connect a legacy ISA IRQ to an IDT vector and LAPIC target.
@@ -60,7 +60,7 @@ class InterruptDispatcher {
     static void unmap_pci_irq(uint32_t gsi, uint8_t vector);
 
    private:
-    static TrapFrame* default_handler(TrapFrame* frame, uint32_t cpu_id);
+    static void default_handler(TrapFrame* frame, uint32_t cpu_id);
     static IInterruptHandler* handlers[256];
 };
 }  // namespace kernel::cpu::arch
