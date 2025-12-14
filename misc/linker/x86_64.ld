@@ -22,13 +22,13 @@ SECTIONS
     } :requests
 
     /* Align to page boundar */
-    . = ALIGN(0x1000);
+    . = ALIGN(CONSTANT(MAXPAGESIZE));
 
     .text : {
         *(.text .text.*)
     } :text
 
-    . = ALIGN(0x1000);
+    . = ALIGN(CONSTANT(MAXPAGESIZE));
 
     .rodata : {
         *(.rodata .rodata.*)
@@ -47,7 +47,7 @@ SECTIONS
         PROVIDE_HIDDEN(__fini_array_end = .);
     } :rodata
 
-    . = ALIGN(0x1000);
+    . = ALIGN(CONSTANT(MAXPAGESIZE));
 
     .data : {
         *(.data .data.*)

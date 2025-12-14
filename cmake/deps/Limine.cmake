@@ -15,7 +15,7 @@ function(setup_limine)
     CPMAddPackage(
         NAME limine_artifacts
         GIT_REPOSITORY https://github.com/limine-bootloader/limine.git
-        GIT_TAG v10.4.0-binary
+        GIT_TAG v10.5.0-binary
         DOWNLOAD_ONLY YES
     )
 
