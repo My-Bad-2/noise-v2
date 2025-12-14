@@ -3,8 +3,13 @@
 #include "libs/log.hpp"
 #include "memory/memory.hpp"
 #include "hal/cpu.hpp"
+#include "task/process.hpp"
 
 namespace kernel {
+void idle(void*) {
+    arch::halt(true);
+}
+
 extern "C" void kmain() {
     arch::get_kconsole()->init(115200);
 
@@ -14,6 +19,8 @@ extern "C" void kmain() {
     cpu::CPUCoreManager::init_core(0, 0);
 
     LOG_INFO("Hello, World!");
+
+    auto thread = new task::Thread(nullptr, idle, nullptr);
 
     arch::halt(true);
 }
