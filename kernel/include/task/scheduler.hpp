@@ -20,6 +20,7 @@ struct Scheduler : public cpu::IInterruptHandler {
     void yield();
     void schedule();
 
+    void aging_tick();
     void block();
     void unblock(Thread* t);
     void terminate();

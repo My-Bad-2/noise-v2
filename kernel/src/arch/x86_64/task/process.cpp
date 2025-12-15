@@ -11,7 +11,8 @@ using namespace cpu::arch;
 
 namespace {
 void thread_exit() {
-    LOG_DEBUG("Thread has returned. Terminating...");
+    // Entry point when a thread's main function returns.
+    LOG_DEBUG("Task: thread entry function returned; terminating");
     Scheduler::get().terminate();
 }
 }  // namespace
@@ -28,6 +29,9 @@ struct SwitchContext {
 
 namespace {
 void setup_kstack(Thread* thread, uintptr_t entry, uintptr_t arg) {
+    // Build an initial kernel stack frame so that when we context-switch into this
+    // thread for the first time, it will enter at `entry(arg)` and return via
+    // `thread_exit` when the function completes.
     uintptr_t stack_top = reinterpret_cast<uintptr_t>(thread->kernel_stack) + KSTACK_SIZE;
 
     uintptr_t return_addr_slot                      = stack_top - 8;
@@ -53,15 +57,16 @@ void setup_kstack(Thread* thread, uintptr_t entry, uintptr_t arg) {
 
     context->return_address = reinterpret_cast<uintptr_t>(switch_trampoline);
 
-    LOG_DEBUG("Thread %lu initialized. KStack Top: %p, SP: %p", thread->tid, stack_top,
+    LOG_DEBUG("Task: thread %lu initialized (kstack_top=%p, sp=%p)", thread->tid, stack_top,
               switch_addr);
 }
 }  // namespace
 
 void Thread::arch_init(uintptr_t entry, uintptr_t arg) {
+    // Allocate the kernel stack and set up the initial context.
     this->kernel_stack = new std::byte[KSTACK_SIZE];
 
-    LOG_DEBUG("kstack = %p", this->kernel_stack);
+    LOG_DEBUG("Task: allocated kernel stack at %p", this->kernel_stack);
     setup_kstack(this, entry, arg);
 }
 }  // namespace kernel::task

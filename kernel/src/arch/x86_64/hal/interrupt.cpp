@@ -119,12 +119,9 @@ void InterruptDispatcher::dispatch(TrapFrame* frame) {
         }
 
         if (status == IrqStatus::Reschedule) {
-            // If a driver is unblocked by this IRQ, the scheduler will be
-            // invoked to pick a better runnable task. The actual scheduling
-            // hook is left as a TODO to keep this layer scheduler-agnostic.
             LOG_DEBUG("IDT: vector %u requested reschedule on CPU %u", vector, cpu->cpu_id);
             task::Scheduler& sched = task::Scheduler::get();
-            sched.yield();
+            sched.schedule();
         }
     } else {
         default_handler(frame, cpu->cpu_id);
