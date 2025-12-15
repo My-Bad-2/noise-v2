@@ -65,8 +65,9 @@ void Scheduler::add_thread(Thread* t) {
         p = MAX_PRIORITY - 1;
     }
 
-    LockGuard guard(this->lock);
+    lock.lock();
     this->ready_queue[p].push_back(t);
+    lock.unlock();
 }
 
 void Scheduler::block() {

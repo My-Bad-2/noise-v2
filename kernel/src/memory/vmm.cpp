@@ -163,7 +163,8 @@ void VirtualManager::init() {
     // activate it via CR3; after this, all code runs in the "real" kernel VA.
     map_pagemap();
     map_kernel();
-    CowManager::init();
+    // This isn't CoW. I've been bamboozled T-T
+    // CowManager::init();
 
     kernel_pagemap.load(0);
 
@@ -410,7 +411,7 @@ void* VirtualManager::allocate(size_t count, PageSize size, uint8_t flags, Cache
         return nullptr;
     }
 
-    bool is_lazy = (flags & Lazy);
+    bool is_lazy = (flags & Lazy) && CowManager::initialized();
 
     if (is_lazy) {
         // We can't use 2MB/1GB pages for CoW because we only have a 4KB zero page.
