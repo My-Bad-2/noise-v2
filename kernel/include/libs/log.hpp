@@ -14,6 +14,7 @@
 #else
 #define LOG_DEBUG(fmt, ...) static_cast<void>(0)
 #endif
+
 #define LOG_INFO(fmt, ...)                                                                     \
     kernel::__details::Logger::log(kernel::__details::LogLevel::Info, __FILE_NAME__, __LINE__, \
                                    fmt, ##__VA_ARGS__)

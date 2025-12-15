@@ -298,6 +298,110 @@ class Vector {
         }
     }
 
+    iterator erase(const_iterator pos) {
+        pointer p = const_cast<pointer>(pos);
+
+        if (p + 1 != this->finish) {
+            if constexpr (UseMemOps<T>) {
+                memmove(p, p + 1, (this->finish - p - 1) * sizeof(T));
+            } else {
+                for (pointer cur = p; cur < this->finish - 1; ++cur) {
+                    *cur = std::move(*(cur + 1));
+                }
+            }
+        }
+
+        --this->finish;
+
+        if constexpr (!std::is_trivially_destructible_v<T>) {
+            this->finish->~T();
+        }
+
+        return iterator(p);
+    }
+
+    iterator erase(const_iterator first, const_iterator last) {
+        pointer p_first = const_cast<pointer>(first);
+        pointer p_last  = const_cast<pointer>(last);
+
+        if (p_first == p_last) {
+            return iterator(p_first);
+        }
+
+        difference_type count = p_last - p_first;
+
+        if constexpr (UseMemOps<T>) {
+            difference_type tail_count = this->finish - p_last;
+            if (tail_count > 0) {
+                memmove(p_first, p_last, tail_count * sizeof(T));
+            }
+        } else {
+            pointer cur = p_first;
+            pointer src = p_last;
+            while (src != this->finish) {
+                *cur = std::move(*src);
+                ++cur;
+                ++src;
+            }
+        }
+
+        pointer new_finish = this->finish - count;
+
+        if constexpr (!std::is_trivially_destructible_v<T>) {
+            for (pointer ptr = new_finish; ptr != this->finish; ++ptr) {
+                ptr->~T();
+            }
+        }
+
+        this->finish = new_finish;
+        return iterator(p_first);
+    }
+
+    size_type remove(const T& value) {
+        pointer read  = this->start;
+        pointer write = this->start;
+
+        // Find first occurrence
+        while (read != this->finish) {
+            if (*read == value) {
+                break;
+            }
+            ++read;
+            ++write;
+        }
+
+        if (read == this->finish) {
+            return 0;
+        }
+
+        // Skip the found element and continue
+        ++read;
+
+        while (read != this->finish) {
+            if (!(*read == value)) {
+                if constexpr (UseMemOps<T>) {
+                    *write = *read;
+                } else {
+                    *write = std::move(*read);
+                }
+
+                ++write;
+            }
+            ++read;
+        }
+
+        size_type removed_count = this->finish - write;
+
+        if constexpr (!std::is_trivially_destructible_v<T>) {
+            for (pointer ptr = write; ptr != this->finish; ++ptr) {
+                ptr->~T();
+            }
+        }
+
+        this->finish = write;
+        return removed_count;
+    }
+
     void resize_no_init(size_type new_size) {
         if (new_size > this->capacity()) {
             size_type growth = this->calculate_growth(new_size - this->size());
@@ -340,8 +444,6 @@ class Vector {
 
         this->finish = this->start;
     }
-
-    // --- Iterator Implementation ---
 
     iterator begin() noexcept {
         return this->start;
@@ -390,8 +492,6 @@ class Vector {
     const_reverse_iterator crend() const noexcept {
         return const_reverse_iterator(this->begin());
     }
-
-    // --- Data Access ---
 
     reference operator[](size_type index) {
         return *(this->start + index);

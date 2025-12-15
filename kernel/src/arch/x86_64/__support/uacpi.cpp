@@ -26,7 +26,7 @@ class UacpiIrqAdapter : public IInterruptHandler {
         if (ret == UACPI_INTERRUPT_HANDLED) {
             return IrqStatus::Handled;
         }
-        
+
         return IrqStatus::Unhandled;
     }
 

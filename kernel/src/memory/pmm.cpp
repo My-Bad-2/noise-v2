@@ -146,7 +146,7 @@ void* PhysicalManager::alloc_from_bitmap(size_t count) {
                         pmm_state.used_pages++;
                         pmm_state.free_idx_hint = idx + 1;
 
-                        LOG_DEBUG("PMM alloc_from_bitmap (summary path) page=%zu", idx);
+                        // LOG_DEBUG("PMM alloc_from_bitmap (summary path) page=%zu", idx);
                         return reinterpret_cast<void*>(idx * PAGE_SIZE_4K);
                     }
                 }
@@ -177,7 +177,7 @@ void* PhysicalManager::alloc_from_bitmap(size_t count) {
                             pmm_state.used_pages++;
                             pmm_state.free_idx_hint = idx + 1;
 
-                            LOG_DEBUG("PMM alloc_from_bitmap (wrap+summary) page=%zu", idx);
+                            // LOG_DEBUG("PMM alloc_from_bitmap (wrap+summary) page=%zu", idx);
                             return reinterpret_cast<void*>(idx * PAGE_SIZE_4K);
                         }
                     }
@@ -233,8 +233,8 @@ void* PhysicalManager::alloc_from_bitmap(size_t count) {
                         pmm_state.used_pages += count;
                         pmm_state.free_idx_hint = block_start + count;
 
-                        LOG_DEBUG("PMM alloc_from_bitmap (range) start=%zu count=%zu", block_start,
-                                  count);
+                        // LOG_DEBUG("PMM alloc_from_bitmap (range) start=%zu count=%zu", block_start,
+                                //   count);
                         return reinterpret_cast<void*>(block_start * PAGE_SIZE_4K);
                     }
                 } else {
@@ -280,15 +280,15 @@ void* PhysicalManager::alloc(size_t count) {
 
         if (cached != nullptr) {
             pmm_state.used_pages++;
-            LOG_DEBUG("PMM alloc (cached) page=%p used=%zu", cached, pmm_state.used_pages);
+            // LOG_DEBUG("PMM alloc (cached) page=%p used=%zu", cached, pmm_state.used_pages);
             return cached;
         }
     }
 
     void* addr = alloc_from_bitmap(count);
     if (addr != nullptr) {
-        LOG_DEBUG("PMM alloc (bitmap) count=%zu addr=%p used_pages=%zu", count, addr,
-                  pmm_state.used_pages);
+        // LOG_DEBUG("PMM alloc (bitmap) count=%zu addr=%p used_pages=%zu", count, addr,
+                //   pmm_state.used_pages);
     } else {
         LOG_WARN("PMM alloc failed count=%zu", count);
     }
@@ -338,8 +338,8 @@ void* PhysicalManager::alloc_aligned(size_t count, size_t alignment) {
                 pmm_state.free_idx_hint = curr + count;
 
                 void* addr = reinterpret_cast<void*>(curr * PAGE_SIZE_4K);
-                LOG_DEBUG("PMM alloc_aligned count=%zu align=0x%zx addr=%p used_pages=%zu", count,
-                          alignment, addr, pmm_state.used_pages);
+                // LOG_DEBUG("PMM alloc_aligned count=%zu align=0x%zx addr=%p used_pages=%zu", count,
+                        //   alignment, addr, pmm_state.used_pages);
                 return addr;
             }
         }
@@ -374,7 +374,7 @@ void* PhysicalManager::alloc_clear(size_t count) {
         // Map into higher-half and clear contents.
         uintptr_t virt = to_higher_half(reinterpret_cast<uintptr_t>(ret));
         memset(reinterpret_cast<void*>(virt), 0, count * PAGE_SIZE_4K);
-        LOG_DEBUG("PMM alloc_clear count=%zu addr=%p", count, ret);
+        // LOG_DEBUG("PMM alloc_clear count=%zu addr=%p", count, ret);
     }
 
     return ret;
@@ -408,7 +408,7 @@ void PhysicalManager::free(void* ptr, size_t count) {
         // Attempt to push into the stack cache.
         if (cache_push(ptr)) {
             pmm_state.used_pages--;
-            LOG_DEBUG("PMM free (cached) page=%p used=%zu", ptr, pmm_state.used_pages);
+            // LOG_DEBUG("PMM free (cached) page=%p used=%zu", ptr, pmm_state.used_pages);
             return;
         }
 
@@ -429,13 +429,13 @@ void PhysicalManager::free(void* ptr, size_t count) {
         // Push the new page onto stack.
         cache_push(ptr);
         pmm_state.used_pages--;
-        LOG_DEBUG("PMM free (after flush) page=%p used=%zu", ptr, pmm_state.used_pages);
+        // LOG_DEBUG("PMM free (after flush) page=%p used=%zu", ptr, pmm_state.used_pages);
         return;
     }
 
     // Multi-page free: go directly to bitmap.
     free_to_bitmap(reinterpret_cast<uintptr_t>(ptr) / PAGE_SIZE_4K, count);
-    LOG_DEBUG("PMM free range addr=%p count=%zu used_pages=%zu", ptr, count, pmm_state.used_pages);
+    // LOG_DEBUG("PMM free range addr=%p count=%zu used_pages=%zu", ptr, count, pmm_state.used_pages);
 }
 
 void PhysicalManager::reclaim_type(size_t memmap_type) {

@@ -8,6 +8,7 @@ struct Thread;
 }
 
 namespace kernel::cpu {
+extern bool initialized;
 /**
  * @brief Generic per‑CPU data visible to higher layers.
  *

@@ -3,17 +3,15 @@
 #include "libs/log.hpp"
 #include "arch.hpp"
 #include "task/process.hpp"
-#include "task/scheduler.hpp"
 
 namespace kernel::cpu {
 namespace {
 void idle_loop(void*) {
-    kernel::arch::disable_interrupts();
-    LOG_DEBUG("Hello");
-    kernel::arch::enable_interrupts();
     kernel::arch::halt(true);
 }
 }  // namespace
+
+bool initialized = false;
 
 PerCPUData* CPUCoreManager::init_core(uint32_t cpu_id, uintptr_t stack_top) {
     PerCPUData* cpu = new PerCPUData;
@@ -26,12 +24,12 @@ PerCPUData* CPUCoreManager::init_core(uint32_t cpu_id, uintptr_t stack_top) {
     arch::CPUData::init(&cpu->arch, stack_top);
     arch::CPUData::commit_state(cpu);
 
-    cpu->idle_thread = new task::Thread(nullptr, idle_loop, nullptr);
+    cpu->idle_thread = new task::Thread(task::kernel_proc, idle_loop, nullptr);
     cpu->curr_thread = cpu->idle_thread;
 
     cpu->idle_thread->thread_state = task::Running;
 
-    task::Scheduler& sched = task::Scheduler::get();
+    initialized = true;
 
     LOG_INFO("CPU: initialized core id=%u per_cpu=%p stack_top=0x%lx", cpu_id, cpu, stack_top);
     return cpu;

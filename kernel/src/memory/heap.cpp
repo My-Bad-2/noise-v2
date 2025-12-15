@@ -228,7 +228,8 @@ void* KernelHeap::alloc(size_t size) {
     void* user_ptr =
         reinterpret_cast<void*>(reinterpret_cast<char*>(best_fit) + sizeof(BlockHeader));
 
-    LOG_DEBUG("KernelHeap: alloc size=%zu -> %p (block_size=%zu)", size, user_ptr, best_fit->size);
+    // LOG_DEBUG("KernelHeap: alloc size=%zu -> %p (block_size=%zu)", size, user_ptr,
+    // best_fit->size);
     return user_ptr;
 }
 
@@ -258,7 +259,7 @@ void KernelHeap::free(void* ptr) {
     header->is_free = true;
     this->insert_free_node(header);
 
-    LOG_DEBUG("KernelHeap: free %p (size=%zu)", ptr, header->size);
+    // LOG_DEBUG("KernelHeap: free %p (size=%zu)", ptr, header->size);
 
     this->coalesce(header);
 }

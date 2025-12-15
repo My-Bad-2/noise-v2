@@ -26,8 +26,8 @@ MMIORegion::MMIORegion(uintptr_t phys_addr, size_t size, memory::CacheType cache
     // Map each 4K page with the requested cache policy into the reserved region.
     for (size_t i = 0; i < this->mapped_size; i += PAGE_SIZE_4K) {
         if (!VirtualManager::curr_map()->map(reinterpret_cast<uintptr_t>(this->page_base) + i,
-                                            phys_page_start + i, Read | Write, cache,
-                                            PageSize::Size4K)) {
+                                             phys_page_start + i, Read | Write, cache,
+                                             PageSize::Size4K)) {
             LOG_ERROR("MMIO: failed to map page for phys=0x%lx", phys_page_start + i);
             return;
         }

@@ -13,7 +13,7 @@ namespace kernel::task {
 namespace {
 // Global tick counter used to trigger periodic scheduler maintenance (e.g. aging).
 uint64_t total_ticks = 0;
-}
+}  // namespace
 
 Thread* Scheduler::get_next_thread() {
     // Pick the next runnable thread, starting from the highest priority queue.
@@ -42,6 +42,9 @@ void Scheduler::schedule() {
     Thread* next = this->get_next_thread();
     lock.unlock();
 
+    Process* prev_proc = prev->owner;
+    Process* next_proc = next->owner;
+
     // Nothing to do if we're going to continue running the same thread.
     if (prev == next) {
         if (int_enabled) {
@@ -63,9 +66,16 @@ void Scheduler::schedule() {
 
     total_ticks++;
 
-    // Drive slow-path maintenance work (like priority aging) from timer ticks.
+    // Drive slow-path maintenance work (like priority aging) from scheduler ticks.
     if ((total_ticks % 1000) == 0) {
         this->aging_tick();
+    }
+
+    if (prev_proc != next_proc) {
+        // Switch address space
+        if (next_proc) {
+            next_proc->map->load();
+        }
     }
 
     context_switch(prev, next);

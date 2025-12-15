@@ -1,6 +1,9 @@
 #pragma once
 
+#include <atomic>
+#include "libs/vector.hpp"
 #include "memory/pagemap.hpp"
+#include "libs/spinlock.hpp"
 
 namespace kernel::cpu {
 struct PerCPUData;
@@ -19,11 +22,20 @@ enum ThreadState : uint32_t {
 
 struct Process {
     size_t pid;
-    memory::PageMap map;
-    // Deque<Thread> threads; // Use a vector instead
+    memory::PageMap* map;
 
+    Vector<Process*> children;
+    Vector<Thread*> threads;
+
+    int exit_code;
+    std::atomic<size_t> next_tid;
+    SpinLock lock;
+
+    Process(memory::PageMap* map);
     Process();
-    ~Process();
+    ~Process() = default;
+
+    static void init();
 };
 
 struct Thread {
@@ -32,8 +44,8 @@ struct Thread {
 
     cpu::PerCPUData* cpu;
     std::byte* kernel_stack;
-    Process* parent;
-    
+    Process* owner;
+
     ThreadState thread_state;
     uint16_t priority;
     uint16_t quantum;
@@ -45,4 +57,6 @@ struct Thread {
    private:
     void arch_init(uintptr_t entry, uintptr_t arg);
 };
+
+extern Process* kernel_proc;
 }  // namespace kernel::task

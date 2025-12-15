@@ -491,7 +491,7 @@ void PageMap::create_new(PageMap* map) {
     // After the first initialization, new address spaces inherit the kernel
     // half of the address space by copying upper-level entries.
     if (kernel_initialized) {
-        uintptr_t kmap       = get_kernel_map()->phys_root_addr;
+        uintptr_t kmap      = get_kernel_map()->phys_root_addr;
         uint64_t* kmap_virt = reinterpret_cast<uint64_t*>(to_higher_half(kmap));
 
         for (int i = 256; i < 512; ++i) {

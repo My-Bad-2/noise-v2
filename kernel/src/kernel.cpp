@@ -3,6 +3,7 @@
 #include "libs/log.hpp"
 #include "memory/memory.hpp"
 #include "hal/cpu.hpp"
+#include "task/process.hpp"
 #include "task/scheduler.hpp"
 
 namespace kernel {
@@ -11,6 +12,7 @@ extern "C" void kmain() {
 
     memory::init();
     hal::ACPI::bootstrap();
+    task::Process::init();
     arch::init();
     cpu::CPUCoreManager::init_core(0, 0);
 

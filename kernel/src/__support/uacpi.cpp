@@ -49,7 +49,7 @@ void* uacpi_kernel_map(uacpi_phys_addr addr, uacpi_size len) {
 
     for (size_t i = 0; i < total_size; i += PAGE_SIZE_4K) {
         if (!VirtualManager::curr_map()->map(reinterpret_cast<uintptr_t>(vmm_base_virt_addr) + i,
-                                            aligned_addr + i, flags, cache, PageSize::Size4K)) {
+                                             aligned_addr + i, flags, cache, PageSize::Size4K)) {
             PANIC("Failed to Map UACPI address 0x%lx -> %p", aligned_addr, vmm_base_virt_addr);
         }
     }
