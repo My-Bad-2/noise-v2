@@ -22,7 +22,8 @@ namespace kernel::cpu::arch {
 class InterruptDispatcher {
    public:
     /// Register a handler for a specific interrupt/exception vector.
-    static void register_handler(uint8_t vector, IInterruptHandler* handler);
+    static void register_handler(uint8_t vector, IInterruptHandler* handler,
+                                 bool eoi_first = false);
 
     /// Unregister a handler for a specific interrupt/exception vector.
     static void unregister_handler(uint8_t vector);
@@ -41,7 +42,7 @@ class InterruptDispatcher {
      * This keeps PCI/ISA routing logic out of device drivers.
      */
     static void map_legacy_irq(uint8_t irq, uint8_t vector, IInterruptHandler* handler,
-                               uint32_t dest_cpu = 0);
+                               uint32_t dest_cpu = 0, bool eoi_first = false);
 
     /**
      * @brief Connect a PCI/GS-based interrupt to an IDT vector.
@@ -51,7 +52,7 @@ class InterruptDispatcher {
      * to the chosen CPU and vector.
      */
     static void map_pci_irq(uint32_t gsi, uint8_t vector, IInterruptHandler* handler,
-                            uint32_t dest_cpu = 0);
+                            uint32_t dest_cpu = 0, bool eoi_first = false);
 
     /// Tear down an existing legacy IRQ mapping and unregister the handler.
     static void unmap_legacy_irq(uint8_t irq, uint8_t vector);

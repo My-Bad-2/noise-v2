@@ -23,7 +23,8 @@ function(add_qemu_targets)
         debug
         COMMAND ${QEMU_CMD}
                 -cdrom ${ARG_ISO_FILE}
-                -bios ${OVMF_BINARY_PATH}
+                -drive if=pflash,format=raw,unit=0,file=${OVMF_CODE_BINARY_PATH},readonly=on
+                -drive if=pflash,format=raw,unit=1,file=${OVMF_VARS_BINARY_PATH}
                 ${ARG_COMMON_FLAGS}
                 ${ARG_DEBUG_FLAGS}
         DEPENDS ${ARG_ISO_FILE}

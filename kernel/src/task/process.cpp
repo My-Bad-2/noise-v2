@@ -32,7 +32,6 @@ Process::Process() {
 }
 
 Process::~Process() {
-    this->threads.clear();
     this->map.~PageMap();
 
     // Unsafe af

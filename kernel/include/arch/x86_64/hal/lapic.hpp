@@ -60,6 +60,10 @@ class Lapic {
     /// Return a coarse timestamp in nanoseconds derived from the TSC.
     static uint64_t get_ticks_ns();
 
+    static const uint32_t get_ticks_ms() {
+        return ticks_per_ms;
+    }
+
    private:
     static uint32_t read(uint32_t offset);
     static void write(uint32_t offset, uint32_t value);

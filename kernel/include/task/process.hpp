@@ -1,9 +1,6 @@
 #pragma once
 
-#include <cstdint>
-#include <cstddef>
 #include "memory/pagemap.hpp"
-#include "libs/deque.hpp"
 
 namespace kernel::cpu {
 struct PerCPUData;
@@ -23,7 +20,7 @@ enum ThreadState : uint32_t {
 struct Process {
     size_t pid;
     memory::PageMap map;
-    Deque<Thread> threads;
+    // Deque<Thread> threads; // Use a vector instead
 
     Process();
     ~Process();
@@ -34,13 +31,12 @@ struct Thread {
     uintptr_t kernel_stack_ptr;
 
     cpu::PerCPUData* cpu;
+    std::byte* kernel_stack;
+    Process* parent;
     
     ThreadState thread_state;
-    std::byte* kernel_stack;
-
-    Process* parent;
-
-    uint32_t quantum;
+    uint16_t priority;
+    uint16_t quantum;
 
     Thread() = default;
     Thread(Process* parent, void (*callback)(void*), void* args);

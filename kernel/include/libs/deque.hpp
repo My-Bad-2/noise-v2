@@ -1,3 +1,5 @@
+#pragma once
+
 #include <string.h>
 #include <algorithm>
 #include <type_traits>

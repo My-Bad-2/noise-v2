@@ -3,6 +3,10 @@
 #include <cstdint>
 #include "cpu/cpu.hpp"
 
+namespace kernel::task {
+struct Thread;
+}
+
 namespace kernel::cpu {
 /**
  * @brief Generic per‑CPU data visible to higher layers.
@@ -22,6 +26,8 @@ struct alignas(CACHE_LINE_SIZE) PerCPUData {
     PerCPUData* self;
     uint32_t cpu_id;
     uint32_t status_flag;
+    task::Thread* curr_thread;
+    task::Thread* idle_thread;
     arch::CPUData arch;
 };
 

@@ -1,4 +1,6 @@
 .section .text
+
+.global .trap_return
 .extern exception_handler
 .type interrupt_common_stub, @function
 # interrupt_common_stub:
@@ -51,8 +53,8 @@ interrupt_common_stub:
     swapgs               # Switch GS to Kernel Per-CPU Data
 1:
     call exception_handler
-    movq %rax, %rsp
 
+.trap_return:
     # Check CS again to see if we are returning to User Mode
     movq 144(%rsp), %rax
     testb $3, %al
