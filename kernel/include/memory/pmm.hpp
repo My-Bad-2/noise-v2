@@ -91,6 +91,7 @@ class PhysicalManager {
     static void* alloc(size_t count = 1);
     static void* alloc_aligned(size_t count, size_t alignment);
     static void* alloc_clear(size_t count = 1);
+    static void* alloc_dma(size_t count, size_t alignment);
 
     static void free(void* ptr, size_t count = 1);
     static void reclaim_type(size_t memmap_type);

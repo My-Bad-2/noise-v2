@@ -37,12 +37,13 @@ struct {
     uint_least64_t* bitmap         = nullptr;  // Allocation bitmap (1 bit per page).
     uint_least64_t* summary_bitmap = nullptr;  // Summary bitmap (1 bit per 64 pages).
 
-    size_t total_pages        = 0;  // Total number of managed pages.
-    size_t summary_entries    = 0;  // Number of 64-bit entries in the summary bitmap.
-    size_t bitmap_entries     = 0;  // Number of 64-bit entries in the bitmap.
-    size_t used_pages         = 0;  // Number of currently used pages.
-    size_t free_idx_hint      = 0;  // Hint for next free-page search (small allocations)
-    size_t aligned_index_hint = 0;  // Hint for next free-page search (huge allocations)
+    size_t total_pages           = 0;  // Total number of managed pages.
+    size_t summary_entries       = 0;  // Number of 64-bit entries in the summary bitmap.
+    size_t bitmap_entries        = 0;  // Number of 64-bit entries in the bitmap.
+    size_t used_pages            = 0;  // Number of currently used pages.
+    size_t low_mem_threshold_idx = 0;  // page at which phys_addr >= 4GB
+    size_t free_idx_hint         = 0;  // Hint for next free-page search (small allocations)
+    size_t aligned_index_hint    = 0;  // Hint for next free-page search (huge allocations)
 
     PhysicalManager::PerCPUCache* cpus = nullptr;
     size_t num_cpus                    = 1;
@@ -200,6 +201,13 @@ void PhysicalManager::cache_refill(PerCPUCache& cache) {
 
     size_t start_idx = pmm_state.free_idx_hint / bit_count;
 
+    // Prioritize High mem (>4GB) if we actually have High mem (threshold < total)
+    // and we are currently looking at low mem.
+    if ((pmm_state.low_mem_threshold_idx < pmm_state.total_pages) &&
+        (pmm_state.free_idx_hint < pmm_state.low_mem_threshold_idx)) {
+        start_idx = pmm_state.low_mem_threshold_idx / bit_count;
+    }
+
     // Scan from Hint -> End of Memory
     if (!scan_bitmap_range(start_idx, pmm_state.bitmap_entries) && (start_idx > 0)) {
         // Wrap around (Scan from 0 -> Hint)
@@ -295,11 +303,18 @@ void PhysicalManager::cache_flush(PerCPUCache& cache) {
 }
 
 void* PhysicalManager::alloc_from_bitmap(size_t count) {
+    size_t start_idx = pmm_state.free_idx_hint;
+
+    if ((pmm_state.low_mem_threshold_idx < pmm_state.total_pages) &&
+        (start_idx < pmm_state.low_mem_threshold_idx)) {
+        start_idx = pmm_state.low_mem_threshold_idx;
+    }
+
     // Core bitmap-based allocation path (single or multi-page).
     if (count == 1) {
         // Single-page allocations prefer to find a "mostly free" region
         // using the summary bitmap, then drill down into the main bitmap.
-        size_t search_start         = pmm_state.free_idx_hint / bit_count;
+        size_t search_start         = start_idx / bit_count;
         size_t search_start_summary = search_start / bit_count;
 
         for (size_t s = search_start_summary; s < pmm_state.summary_entries; ++s) {
@@ -428,6 +443,12 @@ void* PhysicalManager::alloc_aligned(size_t count, size_t alignment) {
 
     size_t start_hint = pmm_state.free_idx_hint;
 
+    // Prefer High Memory
+    if ((pmm_state.low_mem_threshold_idx < pmm_state.total_pages) &&
+        (start_hint < pmm_state.low_mem_threshold_idx)) {
+        start_hint = pmm_state.low_mem_threshold_idx;
+    }
+
     // Use the aligned hint if alignment is large
     if (alignment >= PAGE_SIZE_2M) {
         start_hint = pmm_state.aligned_index_hint;
@@ -523,7 +544,59 @@ void* PhysicalManager::alloc_clear(size_t count) {
     return ret;
 }
 
-// NOLINTNEXTLINE
+void* PhysicalManager::alloc_dma(size_t count, size_t alignment) {
+    if ((count == 0) || (alignment == 0) || (alignment % PAGE_SIZE_4K != 0)) {
+        LOG_WARN("PMM alloc_aligned invalid params count=%zu align=0x%zx", count, alignment);
+        return nullptr;
+    }
+
+    size_t pages_per_alignment = alignment / PAGE_SIZE_4K;
+
+    LockGuard guard(pmm_state.lock);
+
+    size_t limit = pmm_state.low_mem_threshold_idx;
+    size_t curr  = 0;
+
+    while (curr < limit) {
+        if ((curr + count) > limit) {
+            break;
+        }
+
+        if ((curr % bit_count) == 0 && (count >= bit_count)) {
+            size_t summary_idx = curr / bit_count / bit_count;
+
+            if ((summary_idx < pmm_state.summary_entries) &&
+                (pmm_state.summary_bitmap[summary_idx] == ~0ul)) {
+                curr += (bit_count * bit_count);
+                curr = align_up(curr, pages_per_alignment);
+                continue;
+            }
+        }
+
+        bool fit = true;
+
+        for(size_t i = 0; i < count; ++i) {
+            if(test_bit(curr + i)) {
+                fit = false;
+                curr = align_up(curr + i + 1, pages_per_alignment);
+                break;
+            }
+        }
+
+        if(fit) {
+            for(size_t i = 0; i < count; ++i) {
+                set_bit(curr + i);
+            }
+
+            pmm_state.used_pages += count;
+
+            return reinterpret_cast<void*>(curr * PAGE_SIZE_4K);
+        }
+    }
+
+    return nullptr;
+}
+
 void PhysicalManager::free_to_bitmap(size_t page_idx, size_t count) {
     // Free a range of pages in the bitmap.
     for (size_t i = 0; i < count; ++i) {
@@ -655,8 +728,16 @@ void PhysicalManager::init() {
         }
     }
 
-    pmm_state.total_pages = div_roundup(highest_addr, PAGE_SIZE_4K);
-    LOG_INFO("PMM: highest_addr=0x%lx total_pages=%zu", highest_addr, pmm_state.total_pages);
+    pmm_state.total_pages           = div_roundup(highest_addr, PAGE_SIZE_4K);
+    pmm_state.low_mem_threshold_idx = (PAGE_SIZE_1G * 4) / PAGE_SIZE_4K;
+
+    // Clam threshold if system has less than 4GB RAM
+    if (pmm_state.low_mem_threshold_idx > pmm_state.total_pages) {
+        pmm_state.low_mem_threshold_idx = pmm_state.total_pages;
+    }
+
+    LOG_INFO("PMM: highest_addr=0x%lx total_pages=%zu low_memory_threshold_page=%zu", highest_addr,
+             pmm_state.total_pages, pmm_state.low_mem_threshold_idx);
 
     size_t bitmap_bytes      = align_up(div_roundup(pmm_state.total_pages, 8u), 8u);
     pmm_state.bitmap_entries = bitmap_bytes / 8;
@@ -762,6 +843,14 @@ void PhysicalManager::init() {
     memset(pmm_state.bitmap, 0xFF, bitmap_bytes);
     memset(pmm_state.summary_bitmap, 0xFF, summary_bytes);
     pmm_state.used_pages = pmm_state.total_pages;
+
+    if (pmm_state.total_pages > pmm_state.low_mem_threshold_idx) {
+        pmm_state.free_idx_hint = pmm_state.low_mem_threshold_idx;
+    } else {
+        pmm_state.free_idx_hint = 0;
+    }
+
+    pmm_state.aligned_index_hint = pmm_state.free_idx_hint;
 
     // Populate free memory from Limine map by freeing all usable pages.
     size_t reclaimed_pages = 0;
