@@ -20,18 +20,6 @@ uint64_t Lapic::tsc_per_ms         = 0;
 
 namespace {
 /**
- * @brief Read the current timestamp counter (TSC).
- *
- * This is intentionally kept private to this TU; higher levels call
- * `Lapic::get_ticks_ns()` instead of touching the TSC directly.
- */
-size_t rdtsc() {
-    uint32_t lo, hi;
-    asm volatile("rdtsc" : "=a"(lo), "=d"(hi));
-    return (static_cast<size_t>(hi) << 32) | lo;
-}
-
-/**
  * @brief 10ms wait using the PIT as a coarse timebase.
  *
  * This is used as a calibration reference when no better source exists.
@@ -63,6 +51,12 @@ void hpet_wait_10ms() {
     HPET::mdelay(10);
 }
 }  // namespace
+
+size_t Lapic::rdtsc() {
+    uint32_t lo, hi;
+    asm volatile("rdtsc" : "=a"(lo), "=d"(hi));
+    return (static_cast<size_t>(hi) << 32) | lo;
+}
 
 /**
  * @brief Read a LAPIC register, abstracting xAPIC vs x2APIC access.
@@ -150,7 +144,7 @@ void Lapic::init() {
 void Lapic::configure_timer(uint8_t vector, TimerMode mode) {
     stop_timer();
 
-    if (mode != TimerMode::TSCDeadline) {
+    if (mode != TimerMode::TscDeadline) {
         // For non-deadline modes, we use a fixed divider (16).
         write(LAPIC_TIMER_DIV, 0x3);
     }
@@ -158,13 +152,13 @@ void Lapic::configure_timer(uint8_t vector, TimerMode mode) {
     uint32_t lvt_val = vector;
 
     switch (mode) {
-        case TimerMode::OneShort:
+        case TimerMode::OneShot:
             lvt_val |= APIC_TIMER_ONESHOT;
             break;
         case TimerMode::Periodic:
             lvt_val |= APIC_TIMER_PERIODIC;
             break;
-        case TimerMode::TSCDeadline:
+        case TimerMode::TscDeadline:
             if (tsc_deadline_supported) {
                 lvt_val |= APIC_TIMER_TSC_DEADLINE;
             } else {
@@ -177,7 +171,7 @@ void Lapic::configure_timer(uint8_t vector, TimerMode mode) {
     write(LAPIC_LVT_TIMER, lvt_val);
 }
 
-void Lapic::start_timer_legacy(uint32_t count) {
+void Lapic::start_timer(uint32_t count) {
     write(LAPIC_TIMER_INIT, count);
 }
 

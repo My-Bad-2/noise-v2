@@ -34,6 +34,14 @@ void clear_eoi(uint8_t vector) {
 
     eoi_bitmap[byte] &= ~(1u << bit);
 }
+
+void send_eoi(uint8_t vector) {
+    if (hal::Lapic::is_ready()) {
+        hal::Lapic::send_eoi();
+    } else {
+        hal::IOAPIC::send_eoi(vector);
+    }
+}
 }  // namespace
 
 IInterruptHandler* InterruptDispatcher::handlers[256] = {nullptr};
@@ -109,7 +117,7 @@ void InterruptDispatcher::dispatch(TrapFrame* frame) {
 
     if (handlers[vector]) {
         if (eoi && eoi_first) {
-            hal::Lapic::send_eoi();
+            send_eoi(vector);
         }
 
         IrqStatus status = handlers[vector]->handle(frame);
@@ -129,7 +137,7 @@ void InterruptDispatcher::dispatch(TrapFrame* frame) {
 
     // EOIs are only sent for external/IRQ vectors, not for CPU exceptions.
     if (eoi && !eoi_first) {
-        hal::Lapic::send_eoi();
+        send_eoi(vector);
     }
 }
 

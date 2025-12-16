@@ -10,4 +10,6 @@
 #define IOAPIC_ARB    0x02
 #define IOAPIC_REDTBL 0x10  // Redirection Table entries start here
 
+#define IOAPIC_EOI 0x40
+
 #define IOAPIC_STATUS_PENDING 0x1000

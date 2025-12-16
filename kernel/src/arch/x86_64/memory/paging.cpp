@@ -445,7 +445,7 @@ void PageMap::unmap(uintptr_t virt_addr, uint16_t owner_pcid, bool free_phys) {
                 if (!is_table_empty(curr_table)) {
                     break;
                 }
-            
+
                 uintptr_t* parent_table = path_tables[l + 1];
                 int parent_idx          = path_indices[l + 1];
 

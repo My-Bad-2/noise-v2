@@ -198,4 +198,8 @@ void IOAPIC::unmask_legacy_irq(uint8_t irq) {
 
     unmask_gsi(gsi);
 }
+
+void IOAPIC::send_eoi(uint8_t vector) {
+    write(0, IOAPIC_EOI, vector);
+}
 }  // namespace kernel::hal

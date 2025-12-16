@@ -1,8 +1,8 @@
 #include "task/scheduler.hpp"
 #include "arch.hpp"
-#include "cpu/exception.hpp"
 #include "hal/cpu.hpp"
 #include "hal/interface/interrupt.hpp"
+#include "hal/timer.hpp"
 #include "libs/log.hpp"
 #include "task/process.hpp"
 
@@ -13,6 +13,11 @@ namespace kernel::task {
 namespace {
 // Global tick counter used to trigger periodic scheduler maintenance (e.g. aging).
 uint64_t total_ticks = 0;
+
+static cpu::IrqStatus scheduler_callback() {
+    Scheduler& sched = Scheduler::get();
+    return sched.tick();
+}
 }  // namespace
 
 Thread* Scheduler::get_next_thread() {
@@ -45,7 +50,7 @@ void Scheduler::schedule() {
     Process* prev_proc = prev->owner;
     Process* next_proc = next->owner;
 
-    if(prev_proc->map->is_dirty) {
+    if (prev_proc->map->is_dirty) {
         prev_proc->map->load();
         prev_proc->map->is_dirty = false;
     }
@@ -140,7 +145,7 @@ void Scheduler::yield() {
     this->schedule();
 }
 
-cpu::IrqStatus Scheduler::handle(cpu::arch::TrapFrame*) {
+cpu::IrqStatus Scheduler::tick() {
     // Timer interrupt handler: charge quanta and reschedule when needed.
     cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_curr_cpu();
     Thread* curr         = cpu->curr_thread;
@@ -225,5 +230,9 @@ void Scheduler::aging_tick() {
             this->ready_queue[t->priority].push_back(t);
         }
     }
+}
+
+void Scheduler::init() {
+    hal::Timer::configure_timer(1, hal::Periodic, 32, scheduler_callback);
 }
 }  // namespace kernel::task

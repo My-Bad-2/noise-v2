@@ -80,6 +80,8 @@ class IOAPIC {
     /// Unmask (enable) a legacy IRQ at the IOAPIC level.
     static void unmask_legacy_irq(uint8_t irq);
 
+    static void send_eoi(uint8_t vector);
+
    private:
     static uint32_t read(int controller_idx, uint32_t reg);
     static void write(int controller_idx, uint32_t reg, uint32_t val);

@@ -1,21 +1,9 @@
 #pragma once
 
 #include "hal/mmio.hpp"
+#include "hal/timer.hpp"
 
 namespace kernel::hal {
-/**
- * @brief LAPIC timer operating modes.
- *
- * These are abstract modes exposed to higher layers; the LAPIC
- * implementation translates them into xAPIC/x2APIC LVT encodings and
- * falls back to the closest behavior hardware supports.
- */
-enum TimerMode : uint8_t {
-    OneShort,
-    Periodic,
-    TSCDeadline,
-};
-
 /**
  * @brief Local APIC (LAPIC/x2APIC) abstraction.
  *
@@ -41,7 +29,7 @@ class Lapic {
     static void broadcast_ipi(uint8_t vector);
 
     static void configure_timer(uint8_t vector, TimerMode mode);
-    static void start_timer_legacy(uint32_t count);
+    static void start_timer(uint32_t count);
     static void arm_tsc_deadline(uint64_t target_tsc);
     static void stop_timer();
 
@@ -63,6 +51,8 @@ class Lapic {
     static const uint32_t get_ticks_ms() {
         return ticks_per_ms;
     }
+
+    static size_t rdtsc();
 
    private:
     static uint32_t read(uint32_t offset);

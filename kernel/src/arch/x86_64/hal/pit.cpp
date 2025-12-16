@@ -118,4 +118,45 @@ void PIT::mdelay(uint32_t ms) {
         wait_ticks(static_cast<uint16_t>(BASE_FREQUENCY_HZ * ms / 1000));
     }
 }
+
+void PIT::configure_periodic(uint32_t freq) {
+    if (freq < 19) {
+        freq = 19;
+    }
+
+    if (freq > BASE_FREQUENCY_HZ) {
+        freq = BASE_FREQUENCY_HZ;
+    }
+
+    uint32_t divisor = BASE_FREQUENCY_HZ / freq;
+
+    out<uint8_t>(PORT_COMMAND, CMD_CHANNEL0 | CMD_ACCESS_LH | CMD_MODE2 | CMD_BINARY);
+    io_wait();
+
+    out<uint8_t>(PORT_CHANNEL0, static_cast<uint8_t>(divisor & 0xFF));
+    io_wait();
+    out<uint8_t>(PORT_CHANNEL0, static_cast<uint8_t>((divisor >> 8) & 0xFF));
+}
+
+void PIT::configure_oneshot(uint32_t ms) {
+    // Max 16-bit count is 65535
+    // 1ms = ~1193 ticks
+    // MAX duration = 65535 / 1193 = ~54ms
+    if (ms > 50) {
+        ms = 50;
+    }
+
+    if (ms < 1) {
+        ms = 1;
+    }
+
+    uint32_t count = (BASE_FREQUENCY_HZ * ms) / 1000;
+
+    out<uint8_t>(PORT_COMMAND, CMD_CHANNEL0 | CMD_ACCESS_LH | CMD_MODE0 | CMD_BINARY);
+    io_wait();
+
+    out<uint8_t>(PORT_CHANNEL0, static_cast<uint8_t>(ms & 0xFF));
+    io_wait();
+    out<uint8_t>(PORT_CHANNEL0, static_cast<uint8_t>((ms >> 8) & 0xFF));
+}
 }  // namespace kernel::hal

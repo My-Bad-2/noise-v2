@@ -28,5 +28,8 @@ class PIT {
     static void wait_ticks(uint16_t ticks);
     static void udelay(uint32_t us);
     static void mdelay(uint32_t ms);
+
+    static void configure_periodic(uint32_t freq);
+    static void configure_oneshot(uint32_t ms);
 };
 }  // namespace kernel::hal

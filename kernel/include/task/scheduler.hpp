@@ -1,6 +1,5 @@
 #pragma once
 
-#include "cpu/exception.hpp"
 #include "libs/deque.hpp"
 #include "hal/interface/interrupt.hpp"
 #include "libs/spinlock.hpp"
@@ -10,11 +9,10 @@
 #define DEFAULT_QUANTUM 20
 
 namespace kernel::task {
-struct Scheduler : public cpu::IInterruptHandler {
+struct Scheduler {
    public:
     Scheduler() = default;
 
-    cpu::IrqStatus handle(cpu::arch::TrapFrame*) override;
     void init();
 
     void yield();
@@ -26,10 +24,7 @@ struct Scheduler : public cpu::IInterruptHandler {
     void terminate();
 
     void add_thread(Thread* t);
-
-    const char* name() const override {
-        return "Scheduler";
-    }
+    cpu::IrqStatus tick();
 
     static Scheduler& get();
 

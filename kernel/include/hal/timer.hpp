@@ -2,22 +2,27 @@
 
 #include <cstddef>
 #include <cstdint>
+#include "hal/interface/interrupt.hpp"
 
 namespace kernel::hal {
-/**
- * @brief High-level time/delay facade for the HAL.
- *
- * `Timer` chooses the most appropriate underlying time source.
- */
+enum TimerMode {
+    TscDeadline,
+    OneShot,
+    Periodic,
+};
+
 class Timer {
    public:
-    /// Return a coarse, monotonic timestamp in nanoseconds if available.
     static size_t get_ticks_ns();
-
-    /// Busy-wait for the given number of microseconds.
     static void udelay(uint32_t us);
 
     /// Busy-wait for the given number of milliseconds.
     static void mdelay(uint32_t ms);
+    static bool configure_timer(uint32_t period_ms, TimerMode mode, uint8_t vector,
+                                cpu::IrqStatus (*callback)());
+
+   private:
+    static void stop();
+    static uint8_t curr_vector;
 };
 }  // namespace kernel::hal
