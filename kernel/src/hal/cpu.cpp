@@ -11,7 +11,7 @@ void idle_loop(void*) {
 }
 }  // namespace
 
-bool initialized = false;
+bool smp_initialized = false;
 
 PerCPUData* CPUCoreManager::init_core(uint32_t cpu_id, uintptr_t stack_top) {
     PerCPUData* cpu = new PerCPUData;
@@ -29,7 +29,7 @@ PerCPUData* CPUCoreManager::init_core(uint32_t cpu_id, uintptr_t stack_top) {
 
     cpu->idle_thread->thread_state = task::Running;
 
-    initialized = true;
+    smp_initialized = true;
 
     LOG_INFO("CPU: initialized core id=%u per_cpu=%p stack_top=0x%lx", cpu_id, cpu, stack_top);
     return cpu;

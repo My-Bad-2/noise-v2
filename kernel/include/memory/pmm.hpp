@@ -73,105 +73,28 @@
 #include <cstddef>
 
 namespace kernel::memory {
+constexpr size_t CACHE_SIZE = 512;  // 2MB cache per CPU
+constexpr size_t BATCH_SIZE = 256;  // Transfer 1MB at a time between Global <-> Local CPU cache
 
-/// Number of pages kept in the quick free-page stack cache. This cache
-/// accelerates frequent single-page alloc/free patterns commonly seen
-/// in page-table management and small kernel allocations.
-constexpr size_t CACHE_SIZE = 512;  // Keep 512 pages in the quick stack
-
-/**
- * @brief Aggregate statistics reported by the physical memory manager.
- *
- * These stats are useful for diagnostics and monitoring memory usage
- * across the entire system.
- */
 struct PMMStats {
     size_t total_memory;  ///< Total managed physical memory (bytes).
     size_t used_memory;   ///< Bytes currently allocated.
     size_t free_memory;   ///< Bytes currently free.
 };
 
-/**
- * @brief Static physical memory manager.
- *
- * Provides page-based allocation, aligned allocation, zeroed pages, and
- * a quick stack cache for single-page operations.
- *
- * In the architecture:
- *  - `kernel::memory::init()` sets up the higher-half mapping and then
- *    calls `PhysicalManager::init()`.
- *  - All physical memory consumers (page tables, etc.) obtain raw physical
- *    frames via this class.
- */
 class PhysicalManager {
    public:
-    /**
-     * @brief Initialize the physical memory manager.
-     *
-     * Must be called once early during boot, after the bootloader memory
-     * map is available. It:
-     *  - Parses the Limine memory map.
-     *  - Reserves space for internal metadata (bitmap(s) + cache).
-     *  - Marks all pages as used, then frees back the usable ones.
-     */
+    struct PerCPUCache;
+
     static void init();
 
-    /**
-     * @brief Allocate one or more contiguous physical pages.
-     *
-     * This is the primary entry point for requesting physical frames.
-     *
-     * @param count Number of pages to allocate (default: 1).
-     * @return Physical address (as void*) on success, nullptr on failure.
-     */
     static void* alloc(size_t count = 1);
-
-    /**
-     * @brief Allocate contiguous physical pages with alignment constraint.
-     *
-     * Typically used for structures that must be aligned to large
-     * boundaries (e.g. paging structures, DMA buffers).
-     *
-     * @param count     Number of pages to allocate.
-     * @param alignment Required alignment in bytes (multiple of PAGE_SIZE_4K).
-     * @return Physical address on success, nullptr on failure.
-     */
     static void* alloc_aligned(size_t count, size_t alignment);
-
-    /**
-     * @brief Allocate and clear pages.
-     *
-     * Like `alloc`, but the returned memory is zero-filled. This is
-     * handy when backing page tables or zeroing out metadata.
-     */
     static void* alloc_clear(size_t count = 1);
 
-    /**
-     * @brief Free previously allocated pages.
-     *
-     * This returns pages back to the PMM pool. For single-page frees, a
-     * small stack cache is used for better locality and performance.
-     *
-     * @param ptr   Physical address returned by `alloc`/`alloc_aligned`.
-     * @param count Number of pages in the block (default: 1).
-     */
     static void free(void* ptr, size_t count = 1);
-
-    /**
-     * @brief Reclaim all pages of a given Limine memmap type.
-     *
-     * After the kernel has finished using bootloader, ACPI, or module
-     * memory, it can call this function to return such regions to the
-     * general-purpose physical memory pool.
-     */
     static void reclaim_type(size_t memmap_type);
 
-    /**
-     * @brief Get current PMM statistics.
-     *
-     * This is safe to call at any time after initialization and provides
-     * a snapshot of physical memory usage.
-     */
     static PMMStats get_stats();
 
    private:
@@ -185,11 +108,10 @@ class PhysicalManager {
     static void* alloc_from_bitmap(size_t count);
     static void free_to_bitmap(size_t page_idx, size_t count);
 
-    // Stack cache helpers for fast single-page alloc/free. This layer sits
+    // CPU cache stack helpers for fast single-page alloc/free. This layer sits
     // above the bitmap and is completely transparent to callers.
-    static bool cache_push(void* addr);
-    static void* cache_pop();
-    static void flush_cache_to_bitmap();
+    static void cache_refill(PerCPUCache& cache);
+    static void cache_flush(PerCPUCache& cache);
 };
 
 }  // namespace kernel::memory

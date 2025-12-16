@@ -112,7 +112,7 @@ void VirtualManager::map_pagemap() {
             }
 
             // LOG_DEBUG("VMM: mapping phys=0x%lx -> virt=0x%lx len=0x%lx type=%u", entry->base,
-                    //   virt_addr, entry->length, entry->type);
+            //   virt_addr, entry->length, entry->type);
 
             kernel_pagemap.map_range(virt_addr, entry->base, entry->length, flags, cache_type);
         }
@@ -152,7 +152,7 @@ void VirtualManager::map_kernel() {
             uintptr_t phys_start = start_aligned - virt_base + phys_base;
 
             // LOG_DEBUG("VMM: mapping kernel segment v=0x%lx p=0x%lx size=0x%lx flags=0x%x",
-                    //   start_aligned, phys_start, size_aligned, seg_flags);
+            //   start_aligned, phys_start, size_aligned, seg_flags);
 
             kernel_pagemap.map_range(start_aligned, phys_start, size_aligned, seg_flags,
                                      CacheType::WriteBack);
@@ -189,7 +189,7 @@ PageMap* PageMap::get_kernel_map() {
 }
 
 PageMap* VirtualManager::curr_map() {
-    if (cpu::initialized) {
+    if (cpu::smp_initialized) {
         cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_curr_cpu();
         task::Process* proc  = cpu->curr_thread->owner;
 
@@ -274,12 +274,12 @@ uintptr_t VirtualAllocator::alloc_region(size_t size, size_t align) {
                 if (tail_size > 0) {
                     // Create a tail region after the allocated block.
                     VmFreeRegion* tail = new_node();
-              
+
                     if (!tail) {
                         LOG_ERROR("VirtualAllocator: failed to allocate tail node");
                         return 0;
                     }
-              
+
                     tail->start  = alloc_end;
                     tail->length = tail_size;
                     tail->next   = curr->next;
@@ -290,8 +290,9 @@ uintptr_t VirtualAllocator::alloc_region(size_t size, size_t align) {
                 // Shrink the current region to just the prefix.
                 curr->length = aligned_addr - curr->start;
 
-                // LOG_DEBUG("VirtualAllocator: alloc_region size=0x%zx align=0x%zx -> 0x%lx (split)",
-                        //   size, align, aligned_addr);
+                // LOG_DEBUG("VirtualAllocator: alloc_region size=0x%zx align=0x%zx -> 0x%lx
+                // (split)",
+                //   size, align, aligned_addr);
                 return aligned_addr;
             } else {
                 // Case 2: allocation starts at the beginning of `curr`.
@@ -313,8 +314,9 @@ uintptr_t VirtualAllocator::alloc_region(size_t size, size_t align) {
                     curr->length = tail_size;
                 }
 
-                // LOG_DEBUG("VirtualAllocator: alloc_region size=0x%zx align=0x%zx -> 0x%lx (trim)",
-                        //   size, align, res);
+                // LOG_DEBUG("VirtualAllocator: alloc_region size=0x%zx align=0x%zx -> 0x%lx
+                // (trim)",
+                //   size, align, res);
                 return res;
             }
         }
@@ -461,7 +463,7 @@ void* VirtualManager::allocate(size_t count, PageSize size, uint8_t flags, Cache
     }
 
     // LOG_DEBUG("VMM: allocate virt=0x%lx count=%zu size=%u", virt_addr, count,
-            //   static_cast<unsigned>(size));
+    //   static_cast<unsigned>(size));
     return reinterpret_cast<void*>(virt_addr);
 }
 
@@ -493,7 +495,7 @@ void VirtualManager::free(void* ptr, size_t count, PageSize size, bool free_phys
     virt_allocator.free_region(virt_addr, total_bytes);
 
     // LOG_DEBUG("VMM: free virt=0x%lx count=%zu size=%u", virt_addr, count,
-            //   static_cast<unsigned>(size));
+    //   static_cast<unsigned>(size));
 }
 
 void* VirtualManager::reserve_mmio(size_t size, size_t align) {

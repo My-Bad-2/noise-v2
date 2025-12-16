@@ -63,3 +63,15 @@ volatile struct limine_rsdp_request rsdp_request = {
     .revision = 0,
     .response = nullptr,
 };
+
+[[gnu::section(".requests")]]
+volatile struct limine_mp_request mp_request = {
+    .id       = LIMINE_MP_REQUEST_ID,
+    .revision = 0,
+    .response = nullptr,
+#ifdef __x86_64__
+    .flags = LIMINE_MP_RESPONSE_X86_64_X2APIC,
+#else
+    .flags = 0,
+#endif
+};
