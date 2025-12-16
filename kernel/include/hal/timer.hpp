@@ -1,8 +1,7 @@
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
 #include "hal/interface/interrupt.hpp"
+#include "libs/min_heap.hpp"
 
 namespace kernel::hal {
 enum TimerMode {
@@ -11,18 +10,65 @@ enum TimerMode {
     Periodic,
 };
 
-class Timer {
+using TimerCallback = void (*)(void*);
+
+struct TimerEvent {
+    size_t expiration_ticks;
+    size_t interval;
+    TimerMode mode;
+
+    TimerCallback callback;
+    void* data;
+    uint32_t id;
+
+    bool operator<(const TimerEvent& other) const {
+        return this->expiration_ticks < other.expiration_ticks;
+    }
+};
+
+class TimerManager {
    public:
+    TimerManager() = default;
+
+    uint32_t schedule(TimerMode mode, size_t ticks, TimerCallback callback, void* data);
+    void tick();
+
+    bool cancel(uint32_t timer_id);
+
+    inline size_t get_current_tick() const {
+        return this->current_tick;
+    }
+
+    inline size_t pending_count() const {
+        return this->events.size();
+    }
+
+   private:
+    size_t current_tick;
+    uint32_t next_timer_id;
+    MinHeap<TimerEvent> events;
+};
+
+class Timer : public cpu::IInterruptHandler {
+   public:
+    const char* name() const override {
+        return "Timer";
+    }
+
+    void init();
+    uint32_t schedule(TimerMode mode, size_t ticks, TimerCallback callback, void* data) {
+        return this->manager->schedule(mode, ticks, callback, data);
+    }
+
+    cpu::IrqStatus handle(cpu::arch::TrapFrame* frame) override;
+
     static size_t get_ticks_ns();
     static void udelay(uint32_t us);
-
-    /// Busy-wait for the given number of milliseconds.
     static void mdelay(uint32_t ms);
-    static bool configure_timer(uint32_t period_ms, TimerMode mode, uint8_t vector,
-                                cpu::IrqStatus (*callback)());
+    static Timer& get();
 
    private:
     static void stop();
-    static uint8_t curr_vector;
+    TimerManager* manager;
 };
 }  // namespace kernel::hal

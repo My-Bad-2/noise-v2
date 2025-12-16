@@ -1,6 +1,7 @@
 #pragma once
 
 #include "libs/vector.hpp"
+#include <algorithm>
 
 namespace kernel {
 template <typename T, int D = 4>
@@ -94,6 +95,28 @@ class MinHeap {
 
         // Return valid iterator (points to the element that now occupies this slot)
         return this->m_data.begin() + index;
+    }
+
+    template <typename Predicate>
+    size_t erase_if(Predicate pred) {
+        // Partition the vector: Move items to keep to the front
+        auto old_end = this->m_data.end();
+        auto new_end = std::remove_if(this->m_data.begin(), this->m_data.end(), pred);
+
+        size_t count = std::distance(new_end, old_end);
+
+        if (count > 0) {
+            // Chop off the removed elements
+            this->m_data.erase(new_end, old_end);
+
+            // Rebuild heap
+            if (this->m_data.size() > 1) {
+                for (int i = (this->m_data.size() - 2) / D; i >= 0; --i) {
+                    this->sift_down(static_cast<size_t>(i));
+                }
+            }
+        }
+        return count;
     }
 
     const T& top() const {

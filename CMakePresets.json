@@ -73,12 +73,6 @@
             "toolchainFile": "${sourceDir}/cmake/toolchains/x86_64-clang.cmake"
         },
         {
-            "name": "GCC",
-            "hidden": true,
-            "generator": "Unix Makefiles",
-            "toolchainFile": "${sourceDir}/cmake/toolchains/x86_64-gcc.cmake"
-        },
-        {
             "name": "x86_64-clang",
             "description": "Build x86_64 kernel using Clang with RelWithDebInfo",
             "inherits": [
@@ -117,46 +111,6 @@
                 "Clang",
                 "MinSizeRelease"
             ]
-        },
-        {
-            "name": "x86_64-gcc",
-            "description": "Build x86_64 kernel using gcc cross compiler with RelWithDebInfo",
-            "inherits": [
-                "Base",
-                "x64",
-                "GCC",
-                "ReleaseWithDebug"
-            ]
-        },
-        {
-            "name": "x86_64-gcc-debug",
-            "description": "Build x86_64 kernel using gcc cross compiler with Debug",
-            "inherits": [
-                "Base",
-                "x64",
-                "GCC",
-                "Debug"
-            ]
-        },
-        {
-            "name": "x86_64-gcc-release",
-            "description": "Build x86_64 kernel using gcc cross compiler with Release",
-            "inherits": [
-                "Base",
-                "x64",
-                "GCC",
-                "Release"
-            ]
-        },
-        {
-            "name": "x86_64-gcc-minsize",
-            "description": "Build x86_64 kernel using gcc cross compiler with MinSizeRel",
-            "inherits": [
-                "Base",
-                "x64",
-                "GCC",
-                "MinSizeRelease"
-            ]
         }
     ],
     "buildPresets": [
@@ -175,22 +129,6 @@
         {
             "name": "x86_64-clang-release",
             "configurePreset": "x86_64-clang-release"
-        },
-        {
-            "name": "x86_64-gcc",
-            "configurePreset": "x86_64-gcc"
-        },
-        {
-            "name": "x86_64-gcc-debug",
-            "configurePreset": "x86_64-gcc-debug"
-        },
-        {
-            "name": "x86_64-gcc-minsize",
-            "configurePreset": "x86_64-gcc-minsize"
-        },
-        {
-            "name": "x86_64-gcc-release",
-            "configurePreset": "x86_64-gcc-release"
         }
     ]
 }

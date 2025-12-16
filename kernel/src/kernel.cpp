@@ -4,6 +4,7 @@
 #include "memory/memory.hpp"
 #include "hal/cpu.hpp"
 #include "task/process.hpp"
+#include "hal/timer.hpp"
 #include "task/scheduler.hpp"
 
 namespace kernel {
@@ -16,9 +17,12 @@ extern "C" void kmain() {
     arch::init();
     cpu::CPUCoreManager::init_core(0, 0);
 
-    LOG_INFO("Hello, World!");
+    hal::Timer& timer = hal::Timer::get();
+    timer.init();
 
     task::Scheduler& sched = task::Scheduler::get();
     sched.init();
+
+    LOG_INFO("Hello, World!");
 }
 }  // namespace kernel

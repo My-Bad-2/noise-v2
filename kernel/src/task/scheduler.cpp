@@ -13,11 +13,6 @@ namespace kernel::task {
 namespace {
 // Global tick counter used to trigger periodic scheduler maintenance (e.g. aging).
 uint64_t total_ticks = 0;
-
-static cpu::IrqStatus scheduler_callback() {
-    Scheduler& sched = Scheduler::get();
-    return sched.tick();
-}
 }  // namespace
 
 Thread* Scheduler::get_next_thread() {
@@ -215,7 +210,7 @@ void Scheduler::aging_tick() {
     // Periodically increase the priority of ready threads to avoid starvation.
     LockGuard guard(this->lock);
 
-    for (int p = 0; p < MAX_PRIORITY - 1; p--) {
+    for (int p = 0; p < MAX_PRIORITY - 1; ++p) {
         if (this->ready_queue[p].empty()) {
             continue;
         }
@@ -233,6 +228,14 @@ void Scheduler::aging_tick() {
 }
 
 void Scheduler::init() {
-    hal::Timer::configure_timer(1, hal::Periodic, 32, scheduler_callback);
+    hal::Timer& timer = hal::Timer::get();
+
+    timer.schedule(
+        hal::TimerMode::Periodic, 1000,
+        [](void*) {
+            Scheduler& sched = Scheduler::get();
+            sched.aging_tick();
+        },
+        nullptr);
 }
 }  // namespace kernel::task

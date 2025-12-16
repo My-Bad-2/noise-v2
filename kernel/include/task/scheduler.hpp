@@ -13,8 +13,6 @@ struct Scheduler {
    public:
     Scheduler() = default;
 
-    void init();
-
     void yield();
     void schedule();
 
@@ -25,6 +23,8 @@ struct Scheduler {
 
     void add_thread(Thread* t);
     cpu::IrqStatus tick();
+
+    void init();
 
     static Scheduler& get();
 
