@@ -510,6 +510,22 @@ class Vector {
         return this->start + index;
     }
 
+    reference front() {
+        return *this->start;
+    }
+
+    const_reference front() const {
+        return *this->start;
+    }
+
+    reference back() {
+        return *(this->finish - 1);
+    }
+
+    const_reference back() const {
+        return *(this->finish - 1);
+    }
+
     pointer __restrict data() {
         return this->start;
     }
