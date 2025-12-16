@@ -28,7 +28,7 @@ class CPUCoreManager {
         return smp_initialized;
     }
 
-    private:
+   private:
     static bool smp_initialized;
 };
 }  // namespace kernel::cpu

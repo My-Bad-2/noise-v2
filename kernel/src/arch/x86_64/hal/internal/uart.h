@@ -1,15 +1,3 @@
-/**
- * @file uart.h
- * @brief Internal register definitions for 16550-compatible UARTs.
- *
- * This header is internal to the x86_64 UART HAL implementation. It
- * exposes raw register offsets and bit masks for the 16550 family of
- * UARTs accessed via I/O ports.
- *
- * The higher-level UART driver (`kernel::hal::UART16550`) uses these
- * constants together with the port I/O helpers in `hal/io.hpp` to
- * implement the `IUart` interface.
- */
 #pragma once
 
 // 16550-compatible UART register offsets (from base I/O port).

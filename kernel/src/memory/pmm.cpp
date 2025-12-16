@@ -908,5 +908,4 @@ void PhysicalManager::init() {
              pmm_state.total_pages, (pmm_state.total_pages * PAGE_SIZE_4K) >> 20, reclaimed_pages,
              stats.free_memory >> 20);
 }
-
 }  // namespace kernel::memory

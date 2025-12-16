@@ -68,19 +68,17 @@ This document tracks what is already implemented in the kernel and what is plann
   - Port I/O helpers (`in`/`out`/`io_wait`).
   - Legacy PIC (8259) remap and mask-all for IOAPIC-based systems.
 
+- **Scheduling & Threads**
+  - Saves register state, stack pointer, and per-thread metadata.
+  - Priority-based Round Robin scheduling
+  - Tied totimer ticks (periodic interrupts).
+  
+- **Processes & Address Spaces**
+  - Owns a `PageMap` (CR3), list of threads, and resources.
+
 ## In Progress / Planned
 
-- **Scheduling & Threads**
-  - Introduce a `TCB` (Thread Control Block) type:
-    - Saved register state, stack pointer, and per-thread metadata.
-  - Implement a minimal scheduler:
-    - Initially round-robin or simple priority.
-    - Tied to LAPIC timer ticks (periodic interrupts).
-    - Integrate with `IrqStatus::Reschedule` from interrupt handlers.
-
 - **Processes & Address Spaces**
-  - Define `PCB` (Process Control Block):
-    - Owns a `PageMap` (CR3), list of threads, and resources.
   - Per-process address spaces:
     - Use existing `PageMap::create_new` to fork user/kernel halves.
   - Basic process lifecycle:

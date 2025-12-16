@@ -24,8 +24,6 @@ bool support_1g_pages = false;
 bool support_nx       = false;
 bool pcid_supported   = false;
 
-// Map abstract PageSize to page-table tree depth. This isolates the
-// rest of the code from hard-wiring architectural levels.
 int get_target_level(PageSize size) {
     switch (size) {
         case PageSize::Size4K:
@@ -39,7 +37,6 @@ int get_target_level(PageSize size) {
     }
 }
 
-// Translate high-level flags/cache policy into raw PTE bits.
 size_t convert_generic_flags(uint8_t flags, CacheType cache, PageSize size) {
     size_t ret       = 0;
     const size_t pat = (size == PageSize::Size4K) ? FlagPAT : FlagLPAT;
@@ -325,9 +322,6 @@ bool PageMap::map(uintptr_t virt_addr, uintptr_t phys_addr, uint8_t flags, Cache
 
 bool PageMap::map(uintptr_t virt_addr, uint8_t flags, CacheType cache, PageSize size,
                   bool do_flush) {
-    // This overload is responsible for owning new physical frames and
-    // then delegating to the core mapping function. On failure it eagerly
-    // frees the frame to avoid leaks.
     size_t frames_needed = 0;
     uintptr_t phys_addr  = 0;
 

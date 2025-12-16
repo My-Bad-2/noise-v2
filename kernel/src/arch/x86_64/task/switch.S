@@ -1,7 +1,7 @@
 .section .text
-
 .global context_switch
 .type context_switch, @function
+
 context_switch:
     pushq %rbx
     pushq %rbp
@@ -25,5 +25,6 @@ context_switch:
 .extern .trap_return
 .global switch_trampoline
 .type switch_trampoline, @function
+
 switch_trampoline:
     jmp .trap_return

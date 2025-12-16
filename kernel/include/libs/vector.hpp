@@ -13,7 +13,6 @@
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
 namespace kernel {
-
 template <typename T>
 struct is_relocatable : std::is_trivially_copyable<T> {};
 
@@ -546,5 +545,4 @@ class Vector {
         return this->start == this->finish;
     }
 };
-
 }  // namespace kernel

@@ -14,8 +14,6 @@ namespace {
 KernelHeap kheap;
 }
 
-// Align all allocations to 16 bytes to satisfy common ABI requirements
-// and keep headers and payloads cacheline-friendly.
 size_t KernelHeap::align(size_t n) {
     return align_up(n, 0x10u);
 }

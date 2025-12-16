@@ -1,26 +1,9 @@
-/**
- * @file uart.cpp
- * @brief x86_64 16550 UART implementation of the HAL UART interface.
- *
- * This file contains the low-level implementation of `kernel::hal::UART16550`
- * using legacy I/O ports. All operations are blocking and suitable for
- * use in early boot and debugging.
- *
- * Architectural role:
- *  - Implements a concrete UART driver used as the kernel console.
- *  - `kernel::arch::get_kconsole()` typically instantiates this type
- *    and exposes it via the abstract `IUART` HAL interface.
- *  - The logging subsystem and any debug/console code send characters
- *    through this UART driver (directly or indirectly).
- */
-
 #include "hal/uart.hpp"
 #include "hal/io.hpp"
 #include "internal/uart.h"
 #include "arch.hpp"
 
 namespace kernel::hal {
-
 void UART16550::write(uint16_t reg, uint8_t value) const {
     // Write a single byte to a UART register (base port + offset).
     out(this->port_base + reg, value);
@@ -68,7 +51,7 @@ bool UART16550::init(uint32_t baud_rate) {
 
     // Calculate divisor: base clock (assumed 115200 Hz) / desired baud rate.
 
-    uint16_t divisor = 115200 / (baud_rate);
+    uint16_t divisor = 115200 / baud_rate;
 
     // Program divisor low and high bytes.
     this->write(BAUD_RATE_LOW, divisor & 0xFF);
@@ -113,5 +96,4 @@ bool UART16550::init(uint32_t baud_rate) {
     this->write(MODEM_CONTROL, MODEM_RTS | MODEM_DTR | MODEM_OUT2);
     return true;
 }
-
 }  // namespace kernel::hal

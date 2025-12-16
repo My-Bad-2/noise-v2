@@ -1,15 +1,5 @@
 #pragma once
 
-#include "cpu/regs.h"
-
-/**
- * @brief Internal LAPIC/x2APIC register and bit definitions.
- *
- * This header is private to the LAPIC implementation and mirrors the
- * architectural layout of APIC registers, LVT encodings, and MSR base
- * indices.
- */
-
 // MSRs
 #define TSC_DEADLINE_MSR 0x6E0  // Standard architectural MSR
 #define APIC_BASE_MSR    0x1B

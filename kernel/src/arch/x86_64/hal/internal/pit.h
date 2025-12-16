@@ -1,12 +1,5 @@
 #pragma once
 
-/**
- * @brief Internal constants for the 8253/8254 PIT.
- *
- * These raw port and command bit definitions are only used by the PIT
- * implementation.
- */
-
 #define BASE_FREQUENCY_HZ 1193182
 
 // IO Ports

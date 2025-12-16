@@ -4,8 +4,6 @@
 
 # load_gdt_and_flush(gdtr):
 #  - Installs a new GDT and performs a far return to reload CS.
-#  - Used when switching to per‑CPU GDTs so execution continues on the
-#    freshly installed code/data descriptors.
 #
 # RDI = pointer to GDTR
 load_gdt_and_flush:

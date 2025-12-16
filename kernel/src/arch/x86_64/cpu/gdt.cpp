@@ -23,7 +23,6 @@ namespace kernel::cpu::arch {
 void GDTManager::setup_gdt(CPUData* cpu) {
     // Lambda encodes a flat GDT entry; centralizing the bit layout here
     // keeps the rest of the code free from descriptor-level details.
-
     auto encode_entry = [&](int idx, uint64_t base, uint64_t limit, uint8_t access, uint8_t flags) {
         cpu->gdt[idx].base_low    = (base & 0xFFFF);
         cpu->gdt[idx].base_middle = (base >> 16) & 0xFF;

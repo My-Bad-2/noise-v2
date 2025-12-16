@@ -3,7 +3,6 @@
 #include <cpuid.h>
 
 namespace kernel::arch {
-
 bool check_feature(unsigned int leaf, int reg_idx, int bit) {
     unsigned int eax, ebx, ecx, edx;
 

@@ -44,5 +44,4 @@ class PhysicalManager {
     static void cache_refill(PerCPUCache& cache);
     static void cache_flush(PerCPUCache& cache);
 };
-
 }  // namespace kernel::memory

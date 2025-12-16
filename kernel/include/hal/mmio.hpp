@@ -3,12 +3,12 @@
 #include "memory/pagemap.hpp"
 
 namespace kernel::hal {
-
 class MMIORegion {
    public:
     MMIORegion() : virt_base(0), size(0) {}
 
-    MMIORegion(uintptr_t phys_addr, size_t size, memory::CacheType cache = memory::CacheType::Uncached);
+    MMIORegion(uintptr_t phys_addr, size_t size,
+               memory::CacheType cache = memory::CacheType::Uncached);
 
     template <typename T>
     void write(size_t offset, T value) {

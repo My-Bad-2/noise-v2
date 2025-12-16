@@ -8,7 +8,6 @@
 #define COM4_PORT 0x2E8
 
 namespace kernel::hal {
-
 class UART16550 : public IUART {
    public:
     explicit UART16550(uint16_t port = COM1_PORT) : port_base(port) {}
@@ -26,5 +25,4 @@ class UART16550 : public IUART {
 
     uint16_t port_base;
 };
-
 }  // namespace kernel::hal

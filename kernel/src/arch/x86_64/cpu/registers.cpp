@@ -3,19 +3,16 @@
 namespace kernel::arch {
 Cr0 Cr0::read() {
     Cr0 cr0;
-    // Snapshot full CR0; callers interpret bits via the struct view.
     asm volatile("mov %%cr0, %0" : "=r"(cr0.raw));
     return cr0;
 }
 
 void Cr0::write() {
-    // Commit CR0 changes (paging/WP etc.) in one shot.
     asm volatile("mov %0, %%cr0" ::"r"(raw) : "memory");
 }
 
 Cr2 Cr2::read() {
     Cr2 cr2;
-    // Capture last faulting linear address for page-fault diagnostics.
     asm volatile("mov %%cr2, %0" : "=r"(cr2.linear_address));
     return cr2;
 }
@@ -45,7 +42,6 @@ void Cr4::write() {
 }
 
 void InvpcidDesc::flush(InvpcidType type) {
-    // Use hardware INVPCID to invalidate TLB entries in a targeted way.
     asm volatile("invpcid (%0), %1" ::"r"(this), "r"(static_cast<uint64_t>(type)) : "memory");
 }
 
@@ -78,14 +74,6 @@ void Mxcsr::write() {
     asm volatile("ldmxcsr %0" ::"m"(raw));
 }
 
-/**
- * Write to XCR0 using 'xsetbv'.
- *
- * WARNING:
- *  - Requires enabling XSAVE in CR4 (CR4.OSXSAVE) and checking that the
- *    requested state components are permitted by CPUID; otherwise this
- *    raises #UD or #GP.
- */
 void Xcr0::write() {
     uint32_t eax = raw & 0xFFFFFFFF;
     uint32_t edx = raw >> 32;

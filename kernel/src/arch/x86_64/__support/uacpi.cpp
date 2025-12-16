@@ -9,6 +9,7 @@
 using namespace kernel::hal;
 using namespace kernel::cpu;
 
+namespace {
 class UacpiIrqAdapter : public IInterruptHandler {
    private:
     uacpi_interrupt_handler handler;
@@ -45,9 +46,8 @@ struct AdapterNode {
     AdapterNode* next;
 };
 
-namespace {
 AdapterNode* adapter_list = nullptr;
-}
+}  // namespace
 
 uacpi_status uacpi_kernel_io_write8(uacpi_handle handle, uacpi_size offset, uacpi_u8 in_value) {
     uintptr_t address = reinterpret_cast<uintptr_t>(handle) + offset;

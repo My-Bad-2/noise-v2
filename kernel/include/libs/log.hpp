@@ -39,6 +39,5 @@ class Logger {
     static const char* level_to_string(LogLevel level);
     static const char* level_to_color(LogLevel level);
 };
-
 }  // namespace __details
 }  // namespace kernel

@@ -1,12 +1,10 @@
 #include <stdio.h>
-#include <stdarg.h>
 #include "arch.hpp"
 #include "libs/log.hpp"
 
 namespace kernel {
 namespace __details {
 namespace {
-
 // ANSI color escape sequences for different log levels. These are used
 // to visually distinguish severities in a serial terminal.
 constexpr const char* COLOR_RESET   = "\033[0m";
@@ -15,7 +13,6 @@ constexpr const char* COLOR_WHITE   = "\033[37m";
 constexpr const char* COLOR_YELLOW  = "\033[33m";
 constexpr const char* COLOR_RED     = "\033[31m";
 constexpr const char* COLOR_MAGENTA = "\033[35m";
-
 }  // namespace
 
 const char* Logger::level_to_string(LogLevel level) {
@@ -86,6 +83,5 @@ void Logger::panic(const char* file, int line, const char* format, ...) {
     // All unrecoverable errors (e.g. bad memory map) funnel into this.
     arch::halt(false);
 }
-
 }  // namespace __details
 }  // namespace kernel

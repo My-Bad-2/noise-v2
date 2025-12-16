@@ -15,32 +15,28 @@ IsoInfo* iso_list       = nullptr;
 X2ApicInfo* x2apic_list = nullptr;
 acpi_madt* hdr          = nullptr;
 
-// The following helpers build simple forward-linked lists of MADT-derived
-// structures. These lists are intentionally kept in a trivial form so
-// later APIC/IRQ code can iterate them with minimal coupling.
-
-void AddLapic(acpi_madt_lapic& lapic) {
+void add_lapic(acpi_madt_lapic& lapic) {
     LapicInfo* node = new LapicInfo;
     node->next      = lapic_list;
     node->lapic     = lapic;
     lapic_list      = node;
 }
 
-void AddIoApic(acpi_madt_ioapic& ioapic) {
+void add_ioapic(acpi_madt_ioapic& ioapic) {
     IoApicInfo* node = new IoApicInfo;
     node->next       = ioapic_list;
     node->ioapic     = ioapic;
     ioapic_list      = node;
 }
 
-void AddIso(acpi_madt_interrupt_source_override& iso) {
+void add_iso(acpi_madt_interrupt_source_override& iso) {
     IsoInfo* node = new IsoInfo;
     node->next    = iso_list;
     node->iso     = iso;
     iso_list      = node;
 }
 
-void AddX2Apic(acpi_madt_x2apic& x2apic) {
+void add_x2apic(acpi_madt_x2apic& x2apic) {
     X2ApicInfo* node = new X2ApicInfo;
     node->next       = x2apic_list;
     node->x2apic     = x2apic;
@@ -85,14 +81,14 @@ void ACPI::parse_tables() {
             case ACPI_MADT_ENTRY_TYPE_LAPIC: {
                 // Local APIC per-CPU descriptors (APIC ID, enabled state).
                 auto* lapic = reinterpret_cast<acpi_madt_lapic*>(entry);
-                AddLapic(*lapic);
+                add_lapic(*lapic);
                 LOG_DEBUG("ACPI: LAPIC entry apic_id=%u flags=0x%x", lapic->id, lapic->flags);
                 break;
             }
             case ACPI_MADT_ENTRY_TYPE_IOAPIC: {
                 // IOAPIC controllers for external interrupts.
                 auto* ioapic = reinterpret_cast<acpi_madt_ioapic*>(entry);
-                AddIoApic(*ioapic);
+                add_ioapic(*ioapic);
                 LOG_DEBUG("ACPI: IOAPIC entry id=%u addr=0x%x gsi_base=%u", ioapic->id,
                           ioapic->address, ioapic->gsi_base);
                 break;
@@ -100,7 +96,7 @@ void ACPI::parse_tables() {
             case ACPI_MADT_ENTRY_TYPE_INTERRUPT_SOURCE_OVERRIDE: {
                 // Overrides for legacy PIC IRQs (e.g. remapped timer/keyboard).
                 auto* iso = reinterpret_cast<acpi_madt_interrupt_source_override*>(entry);
-                AddIso(*iso);
+                add_iso(*iso);
                 LOG_DEBUG("ACPI: ISO entry bus=%u src_irq=%u gsi=%u flags=0x%x", iso->bus,
                           iso->source, iso->gsi, iso->flags);
                 break;
@@ -108,7 +104,7 @@ void ACPI::parse_tables() {
             case ACPI_MADT_ENTRY_TYPE_LOCAL_X2APIC: {
                 // x2APIC LAPIC entries for systems using logical APIC IDs.
                 auto* x2 = reinterpret_cast<acpi_madt_x2apic*>(entry);
-                AddX2Apic(*x2);
+                add_x2apic(*x2);
                 LOG_DEBUG("ACPI: x2APIC entry id=%u flags=0x%x", x2->id, x2->flags);
                 break;
             }

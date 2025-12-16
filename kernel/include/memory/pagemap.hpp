@@ -61,5 +61,4 @@ class PageMap {
     /// Physical address of the root page-table.
     uintptr_t phys_root_addr;
 };
-
 }  // namespace kernel::memory

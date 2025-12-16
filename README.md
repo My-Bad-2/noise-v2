@@ -1,6 +1,6 @@
 # Noise
 
-A Work-In-Progress lightweight, modular microkernel.
+A Work-In-Progress kernel.
 
 ## Prerequisites
 Before building and running this project, ensure you have the following tools installed on your system:

@@ -1,15 +1,6 @@
-/**
- * @file memory.cpp
- * @brief Memory subsystem initialization glue.
- *
- * Reads the higher-half direct-map offset from the bootloader and
- * initializes the physical memory manager.
- */
-
 #include "boot/boot.h"
 #include "memory/memory.hpp"
 #include "memory/pmm.hpp"
-#include "libs/log.hpp"
 #include "memory/vmm.hpp"
 
 namespace kernel::memory {
@@ -19,13 +10,8 @@ uintptr_t hhdm_offset = 0;
 
 void init() {
     __details::hhdm_offset = hhdm_request.response->offset;
-    LOG_INFO("Memory HHDM offset set to 0x%lx", __details::hhdm_offset);
 
-    // Initialize the physical memory manager.
     PhysicalManager::init();
-
-    // Initialize the Virtual memory manager.
     VirtualManager::init();
 }
-
 }  // namespace kernel::memory

@@ -4,9 +4,9 @@
 
 namespace kernel::cpu {
 enum class IrqStatus : uint8_t {
-    Handled,    // no further work needed.
-    Unhandled, // may escalate or log
-    Reschedule, // current interrupt unblocked a thread; run scheduler
+    Handled,     // no further work needed.
+    Unhandled,   // may escalate or log
+    Reschedule,  // current interrupt unblocked a thread; run scheduler
 };
 
 class IInterruptHandler {

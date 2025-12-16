@@ -3,7 +3,6 @@
 #include <cstdint>
 
 namespace kernel::arch {
-
 // CR0: basic CPU control (paging, write-protection, etc.).
 struct Cr0 {
     union {
