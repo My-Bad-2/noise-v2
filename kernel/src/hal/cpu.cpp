@@ -11,7 +11,7 @@ void idle_loop(void*) {
 }
 }  // namespace
 
-bool smp_initialized = false;
+bool CPUCoreManager::smp_initialized = false;
 
 PerCPUData* CPUCoreManager::init_core(uint32_t cpu_id, uintptr_t stack_top) {
     PerCPUData* cpu = new PerCPUData;

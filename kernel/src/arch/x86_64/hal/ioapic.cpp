@@ -8,7 +8,6 @@ IOAPIC::Controller IOAPIC::controllers[MAX_CONTROLLERS];
 int IOAPIC::num_controllers = 0;
 IsoInfo* IOAPIC::iso_list   = nullptr;
 
-// NOLINTNEXTLINE
 uint32_t IOAPIC::read(int idx, uint32_t reg) {
     // IOAPIC uses an index/data pair; we first select the register,
     // then read the corresponding value from IOWIN.
@@ -16,7 +15,6 @@ uint32_t IOAPIC::read(int idx, uint32_t reg) {
     return controllers[idx].virt_base.read_at<uint32_t>(IOAPIC_IOWIN);
 }
 
-// NOLINTNEXTLINE
 void IOAPIC::write(int idx, uint32_t reg, uint32_t val) {
     controllers[idx].virt_base.write_at(IOAPIC_REGSEL, reg);
     controllers[idx].virt_base.write_at(IOAPIC_IOWIN, val);
@@ -57,7 +55,7 @@ void IOAPIC::init() {
     while (node && num_controllers < MAX_CONTROLLERS) {
         int idx                    = num_controllers;
         controllers[idx].id        = node->ioapic.id;
-        controllers[idx].virt_base = MMIORegion(node->ioapic.address, PAGE_SIZE_4K);
+        controllers[idx].virt_base = MMIORegion(node->ioapic.address, memory::PAGE_SIZE_4K);
         controllers[idx].gsi_start = node->ioapic.gsi_base;
 
         uint32_t ver   = read(idx, IOAPIC_VER);
@@ -84,7 +82,6 @@ void IOAPIC::init() {
     }
 }
 
-// NOLINTNEXTLINE
 void IOAPIC::route_legacy_irq(uint8_t irq, uint8_t vector, uint32_t dest_lapic_id) {
     uint32_t gsi = irq;
     size_t flags = IOAPIC_TRIGGER_EDGE | IOAPIC_POLARITY_HIGH;
@@ -112,11 +109,9 @@ void IOAPIC::route_legacy_irq(uint8_t irq, uint8_t vector, uint32_t dest_lapic_i
         LOG_DEBUG("IOAPIC: ISO for IRQ %u -> GSI %u flags=0x%zx", irq, gsi, flags);
     }
 
-    // NOLINTNEXTLINE
     route_gsi(gsi, vector, dest_lapic_id, flags | IOAPIC_DEST_PHYSICAL | IOAPIC_DELIVERY_FIXED);
 }
 
-// NOLINTNEXTLINE
 void IOAPIC::route_gsi(uint32_t gsi, uint8_t vector, uint32_t dest_lapic_id, size_t flags) {
     int idx = get_controller_idx(gsi);
 

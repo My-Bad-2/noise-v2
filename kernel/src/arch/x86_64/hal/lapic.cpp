@@ -19,11 +19,6 @@ bool Lapic::is_calibrated          = false;
 uint64_t Lapic::tsc_per_ms         = 0;
 
 namespace {
-/**
- * @brief 10ms wait using the PIT as a coarse timebase.
- *
- * This is used as a calibration reference when no better source exists.
- */
 void pit_wait_10ms() {
     constexpr uint16_t TARGET_PIT_TICKS = 11932;
 
@@ -42,11 +37,6 @@ void pit_wait_10ms() {
     }
 }
 
-/**
- * @brief 10ms wait using HPET as a high-precision reference.
- *
- * HPET-backed waits typically give a better TSC/LAPIC calibration.
- */
 void hpet_wait_10ms() {
     HPET::mdelay(10);
 }
@@ -58,13 +48,6 @@ size_t Lapic::rdtsc() {
     return (static_cast<size_t>(hi) << 32) | lo;
 }
 
-/**
- * @brief Read a LAPIC register, abstracting xAPIC vs x2APIC access.
- *
- * Why:
- *  - xAPIC uses an MMIO window, x2APIC uses MSRs. Hiding this choice
- *    keeps the rest of the HAL code independent of the APIC mode.
- */
 uint32_t Lapic::read(uint32_t offset) {
     if (x2apic_active) {
         uint32_t index = X2APIC_MSR_BASE + (offset >> 4);
@@ -74,7 +57,6 @@ uint32_t Lapic::read(uint32_t offset) {
     }
 }
 
-// NOLINTNEXTLINE
 void Lapic::write(uint32_t offset, uint32_t val) {
     if (x2apic_active) {
         arch::Msr msr;
@@ -86,15 +68,6 @@ void Lapic::write(uint32_t offset, uint32_t val) {
     }
 }
 
-/**
- * @brief Initialize the local APIC in either xAPIC or x2APIC mode.
- *
- * Policy:
- *  - Prefer x2APIC when hardware supports it (cheaper IPIs, no MMIO).
- *  - Otherwise fall back to xAPIC with a single MMIO mapping.
- *  - Mask LINT0 and route LINT1 as NMI, and clear error state, so
- *    interrupts start from a known configuration.
- */
 void Lapic::init() {
     x2apic_active          = arch::check_feature(FEATURE_X2APIC);
     tsc_deadline_supported = arch::check_feature(FEATURE_TSC_DEADLINE);
@@ -112,7 +85,7 @@ void Lapic::init() {
 
         if (!lapic_base.ptr()) {
             // Map the LAPIC MMIO window once; all xAPIC accesses go through it.
-            lapic_base = MMIORegion(phys_base, PAGE_SIZE_4K);
+            lapic_base = MMIORegion(phys_base, memory::PAGE_SIZE_4K);
             LOG_INFO("LAPIC: using xAPIC MMIO base=0x%lx", phys_base);
         }
     }
@@ -133,14 +106,6 @@ void Lapic::init() {
              tsc_deadline_supported);
 }
 
-/**
- * @brief Configure the LAPIC timer in a selected mode.
- *
- * Why:
- *  - Provides a uniform interface over hardware that supports legacy
- *    periodic timers and modern TSC-deadline timers, falling back to
- *    one-shot if deadline mode is unavailable.
- */
 void Lapic::configure_timer(uint8_t vector, TimerMode mode) {
     stop_timer();
 
@@ -195,11 +160,6 @@ void Lapic::stop_timer() {
     }
 }
 
-/**
- * @brief Calibrate LAPIC timer and TSC using the PIT as reference.
- *
- * Used when no higher-precision reference (HPET) is available.
- */
 void Lapic::calibrate_with_pit() {
     constexpr uint32_t CALIBRATION_MS = 10;
     PIT::prepare_wait(CALIBRATION_MS);
@@ -210,23 +170,11 @@ void Lapic::calibrate_with_pit() {
     LOG_INFO("LAPIC: calibrated using PIT as 10ms reference");
 }
 
-/**
- * @brief Calibrate LAPIC timer and TSC using HPET as reference.
- *
- * Preferred when HPET is available, as it typically gives more stable
- * tick values than the PIT.
- */
 void Lapic::calibrate_with_hpet() {
     perform_calibration_race(hpet_wait_10ms);
     LOG_INFO("LAPIC: calibrated using HPET as 10ms reference");
 }
 
-/**
- * @brief Core calibration routine shared by PIT/HPET paths.
- *
- * Runs the LAPIC timer and TSC in parallel for ~10ms, then derives
- * ticks-per-ms for both counters from the deltas.
- */
 void Lapic::perform_calibration_race(void (*callback)()) {
     bool int_enabled = false;
     if (arch::interrupt_status()) {
@@ -278,18 +226,11 @@ void Lapic::perform_calibration_race(void (*callback)()) {
     is_calibrated = true;
 }
 
-/**
- * @brief Record calibration data for LAPIC timer delays.
- *
- * Preference order:
- *  1. Modern CPUID leaf 0x15 (if it exposes usable TSC/Crystal info).
- *  2. HPET-based 10ms measurement.
- *  3. PIT-based 10ms measurement.
- *
- * This layering lets newer CPUs skip legacy timer usage while still
- * supporting older hardware gracefully.
- */
 void Lapic::calibrate() {
+    // Preference order:
+    //  1. Modern CPUID leaf 0x15 (if it exposes usable TSC/Crystal info).
+    //  2. HPET-based 10ms measurement.
+    //  3. PIT-based 10ms measurement.
     uint32_t eax, ebx, ecx, edx;
 
     __get_cpuid(0x15, &eax, &ebx, &ecx, &edx);
@@ -430,7 +371,6 @@ void Lapic::send_eoi() {
     write(LAPIC_EOI, 0);
 }
 
-// NOLINTNEXTLINE
 void Lapic::send_ipi(uint32_t dest_id, uint8_t vector) {
     if (x2apic_active) {
         arch::Msr msr;
@@ -457,7 +397,6 @@ void Lapic::broadcast_ipi(uint8_t vector) {
     }
 }
 
-// NOLINTNEXTLINE
 void Lapic::send_init_sipi(uint32_t dest_id, uint8_t page) {
     if (x2apic_active) {
         arch::Msr msr;

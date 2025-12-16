@@ -3,7 +3,7 @@
 #include <cpuid.h>
 
 namespace kernel::arch {
-// NOLINTNEXTLINE
+
 bool check_feature(unsigned int leaf, int reg_idx, int bit) {
     unsigned int eax, ebx, ecx, edx;
 
@@ -32,7 +32,6 @@ bool check_feature(unsigned int leaf, int reg_idx, int bit) {
     }
 }
 
-// NOLINTNEXTLINE
 bool check_feature(unsigned int leaf, unsigned int subleaf, int reg_idx, int bit) {
     unsigned int eax, ebx, ecx, edx;
 
@@ -57,7 +56,6 @@ bool check_feature(unsigned int leaf, unsigned int subleaf, int reg_idx, int bit
     }
 }
 
-// NOLINTNEXTLINE
 unsigned int get_cpuid_value(unsigned int leaf, unsigned int subleaf, int reg_idx) {
     unsigned int eax, ebx, ecx, edx;
 

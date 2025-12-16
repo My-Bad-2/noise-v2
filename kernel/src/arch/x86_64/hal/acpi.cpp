@@ -5,6 +5,7 @@
 #include "uacpi/acpi.h"
 #include "uacpi/status.h"
 #include "uacpi/tables.h"
+#include "hal/apic.hpp"
 
 namespace kernel::hal {
 namespace {
@@ -83,14 +84,14 @@ void ACPI::parse_tables() {
         switch (madt->type) {
             case ACPI_MADT_ENTRY_TYPE_LAPIC: {
                 // Local APIC per-CPU descriptors (APIC ID, enabled state).
-                auto* lapic = reinterpret_cast<acpi_madt_lapic*>(entry);  // NOLINTNEXTLINE
+                auto* lapic = reinterpret_cast<acpi_madt_lapic*>(entry);
                 AddLapic(*lapic);
                 LOG_DEBUG("ACPI: LAPIC entry apic_id=%u flags=0x%x", lapic->id, lapic->flags);
                 break;
             }
             case ACPI_MADT_ENTRY_TYPE_IOAPIC: {
                 // IOAPIC controllers for external interrupts.
-                auto* ioapic = reinterpret_cast<acpi_madt_ioapic*>(entry);  // NOLINTNEXTLINE
+                auto* ioapic = reinterpret_cast<acpi_madt_ioapic*>(entry);
                 AddIoApic(*ioapic);
                 LOG_DEBUG("ACPI: IOAPIC entry id=%u addr=0x%x gsi_base=%u", ioapic->id,
                           ioapic->address, ioapic->gsi_base);
@@ -98,8 +99,7 @@ void ACPI::parse_tables() {
             }
             case ACPI_MADT_ENTRY_TYPE_INTERRUPT_SOURCE_OVERRIDE: {
                 // Overrides for legacy PIC IRQs (e.g. remapped timer/keyboard).
-                auto* iso = reinterpret_cast<acpi_madt_interrupt_source_override*>(
-                    entry);  // NOLINTNEXTLINE
+                auto* iso = reinterpret_cast<acpi_madt_interrupt_source_override*>(entry);
                 AddIso(*iso);
                 LOG_DEBUG("ACPI: ISO entry bus=%u src_irq=%u gsi=%u flags=0x%x", iso->bus,
                           iso->source, iso->gsi, iso->flags);
@@ -107,7 +107,7 @@ void ACPI::parse_tables() {
             }
             case ACPI_MADT_ENTRY_TYPE_LOCAL_X2APIC: {
                 // x2APIC LAPIC entries for systems using logical APIC IDs.
-                auto* x2 = reinterpret_cast<acpi_madt_x2apic*>(entry);  // NOLINTNEXTLINE
+                auto* x2 = reinterpret_cast<acpi_madt_x2apic*>(entry);
                 AddX2Apic(*x2);
                 LOG_DEBUG("ACPI: x2APIC entry id=%u flags=0x%x", x2->id, x2->flags);
                 break;
@@ -118,7 +118,7 @@ void ACPI::parse_tables() {
         }
 
         entry += madt->length;
-        // NOLINTNEXTLINE
+
         madt = reinterpret_cast<acpi_entry_hdr*>(entry);
     }
 

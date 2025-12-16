@@ -1,18 +1,3 @@
-/**
- * @file registers.hpp
- * @brief Strongly-typed wrappers around x86_64 control registers and MSRs.
- *
- * Instead of manually shuffling raw 64-bit values in inline assembly,
- * these structures provide:
- *  - Bitfield views for commonly used control bits.
- *  - `read()`/`write()` helpers that encapsulate the asm instructions.
- *
- * Why:
- *  - Reduces the risk of subtle mistakes when toggling paging, NX, PCID,
- *    SMEP/SMAP, etc.
- *  - Makes call sites self-documenting (e.g. `cr4.smep = true`).
- */
-
 #pragma once
 
 #include <cstdint>
@@ -24,8 +9,6 @@ struct Cr0 {
     union {
         uint64_t raw;
         struct {
-            // The bit layout matches Intel/AMD manuals; only select fields
-            // are named to avoid overconstraining future use.
             uint64_t protected_mode      : 1;
             uint64_t monitor_coprocessor : 1;
             uint64_t emulation           : 1;
@@ -135,13 +118,6 @@ struct InvpcidDesc {
     uint64_t rsvd : 52;
     uint64_t addr;
 
-    /**
-     * @brief Issue INVPCID for this descriptor and @p type.
-     *
-     * Why:
-     *  - Allows precise TLB invalidation (by address, by PCID, or all)
-     *    without the heavy-handed cost of reloading CR3 everywhere.
-     */
     void flush(InvpcidType type);
 };
 
@@ -150,14 +126,7 @@ struct Msr {
     uint32_t index;
     uint64_t value;
 
-    /**
-     * @brief Read an MSR into a typed wrapper.
-     *
-     * Commonly used for EFER, PAT, APIC base, etc., so callers can
-     * manipulate fields in `value` and write them back.
-     */
     static Msr read(uint32_t index);
-    /// Write the stored 64-bit value back to `index`.
     void write();
 };
 
@@ -167,7 +136,7 @@ struct Mxcsr {
         uint32_t raw;
         struct {
             // Sticky Exception Flags (Bits 0-5)
-            // Set by CPU when exception occurs. Must be cleared manually by the kernel.
+            // Set by CPU when exception occurs. Must be cleared manually.
             uint32_t invalid_operation_flag : 1;  // IE
             uint32_t denormal_flag          : 1;  // DE
             uint32_t divide_by_zero_flag    : 1;  // ZE
@@ -211,8 +180,6 @@ struct Mxcsr {
     static Mxcsr read();
     void write();
 };
-
-#include <stdint.h>
 
 // XCR0: Configures the user-state components that the processor is allowed to
 // manage via XSAVE/XRSTOR instructions.
@@ -260,18 +227,6 @@ struct Xcr0 {
     };
 
     static Xcr0 read();
-
-    /**
-     * @brief Program XCR0 via `xsetbv`.
-     *
-     * Why:
-     *  - Controls which extended state components XSAVE/XRSTOR manage,
-     *    and thus how large thread save-areas must be.
-     *
-     * Warning:
-     *  - Requires CR4.OSXSAVE=1 and feature bits to be present, otherwise
-     *    `xsetbv` will fault. Callers must perform CPUID checks first.
-     */
     void write();
 };
 }  // namespace kernel::arch

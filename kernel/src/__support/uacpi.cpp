@@ -27,7 +27,6 @@ uacpi_status uacpi_kernel_get_rsdp(uacpi_phys_addr* out_rsdp_address) {
     return UACPI_STATUS_OK;
 }
 
-// NOLINTNEXTLINE
 void* uacpi_kernel_map(uacpi_phys_addr addr, uacpi_size len) {
     if (len == 0) {
         return nullptr;
@@ -54,7 +53,6 @@ void* uacpi_kernel_map(uacpi_phys_addr addr, uacpi_size len) {
         }
     }
 
-    // NOLINTNEXTLINE
     return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(vmm_base_virt_addr) + offset);
 }
 
@@ -66,7 +64,7 @@ void uacpi_kernel_unmap(void* addr, uacpi_size len) {
     uintptr_t virt_addr = reinterpret_cast<uintptr_t>(addr);
 
     uacpi_size offset = virt_addr & (PAGE_SIZE_4K - 1);
-    // NOLINTNEXTLINE
+
     void* aligned_virt_addr = reinterpret_cast<void*>(virt_addr - offset);
     uacpi_size total_size   = len + offset;
 

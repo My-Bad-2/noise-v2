@@ -385,7 +385,7 @@ void* PhysicalManager::alloc(size_t count) {
 
         size_t core_id = 0;
 
-        if (cpu::smp_initialized) {
+        if (cpu::CPUCoreManager::initialized()) {
             core_id = cpu::CPUCoreManager::get_curr_cpu_id();
         }
 
@@ -647,7 +647,7 @@ void PhysicalManager::free(void* ptr, size_t count) {
 
         size_t core_id = 0;
 
-        if (cpu::smp_initialized) {
+        if (cpu::CPUCoreManager::initialized()) {
             core_id = cpu::CPUCoreManager::get_curr_cpu_id();
         }
 

@@ -39,45 +39,16 @@ namespace kernel::hal {
  */
 class IOAPIC {
    public:
-    /**
-     * @brief Discover and initialize all IOAPIC controllers.
-     *
-     * Builds an internal list of IOAPICs from MADT, maps their MMIO
-     * windows, computes their GSI ranges, and masks all pins by
-     * default. This ensures no stray external interrupts fire until
-     * explicit routing is configured.
-     */
     static void init();
 
-    /**
-     * @brief Route a legacy ISA IRQ (0–15) to a LAPIC vector.
-     *
-     * Uses ACPI Interrupt Source Override (ISO) entries when present to
-     * translate old-style IRQ numbers into GSIs and correct polarity/
-     * trigger semantics, then programs the appropriate IOAPIC pin.
-     */
     static void route_legacy_irq(uint8_t irq, uint8_t vector, uint32_t dest_lapic_id);
-
-    /**
-     * @brief Route an arbitrary GSI to a LAPIC vector.
-     *
-     * Intended for non-legacy interrupts (e.g. modern devices exposing
-     * GSIs directly). Callers supply delivery/polarity/trigger flags to
-     * encode the desired behavior.
-     */
     static void route_gsi(uint32_t gsi, uint8_t vector, uint32_t dest_lapic_id,
                           size_t flags = IOAPIC_DELIVERY_FIXED | IOAPIC_DEST_PHYSICAL);
 
-    /// Mask (disable) a given GSI at the IOAPIC level.
     static void mask_gsi(uint32_t gsi);
-
-    /// Unmask (enable) a given GSI at the IOAPIC level.
     static void unmask_gsi(uint32_t gsi);
 
-    /// Mask (disable) a legacy IRQ at the IOAPIC level.
     static void mask_legacy_irq(uint8_t irq);
-
-    /// Unmask (enable) a legacy IRQ at the IOAPIC level.
     static void unmask_legacy_irq(uint8_t irq);
 
     static void send_eoi(uint8_t vector);
@@ -86,9 +57,7 @@ class IOAPIC {
     static uint32_t read(int controller_idx, uint32_t reg);
     static void write(int controller_idx, uint32_t reg, uint32_t val);
 
-    /// Look up which IOAPIC controller owns a given GSI.
     static int get_controller_idx(uint32_t gsi);
-    /// Find an ACPI interrupt source override for the given legacy IRQ.
     static IsoInfo* find_iso(uint8_t irq);
 
     struct Controller {
@@ -102,7 +71,6 @@ class IOAPIC {
     static Controller controllers[MAX_CONTROLLERS];
     static int num_controllers;
 
-    /// Head of the ISO linked list parsed from ACPI MADT.
     static IsoInfo* iso_list;
 };
 }  // namespace kernel::hal

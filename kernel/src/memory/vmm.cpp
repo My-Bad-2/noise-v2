@@ -189,7 +189,7 @@ PageMap* PageMap::get_kernel_map() {
 }
 
 PageMap* VirtualManager::curr_map() {
-    if (cpu::smp_initialized) {
+    if (cpu::CPUCoreManager::initialized()) {
         cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_curr_cpu();
         task::Process* proc  = cpu->curr_thread->owner;
 
@@ -252,7 +252,6 @@ void VirtualAllocator::return_node(VmFreeRegion* node) {
     free_nodes_head = node;
 }
 
-// NOLINTNEXTLINE
 uintptr_t VirtualAllocator::alloc_region(size_t size, size_t align) {
     // First-fit search over a sorted list of free ranges. The alignment
     // constraint may force us to split a free region into up to two
@@ -329,7 +328,6 @@ uintptr_t VirtualAllocator::alloc_region(size_t size, size_t align) {
     return 0;
 }
 
-// NOLINTNEXTLINE
 void VirtualAllocator::free_region(uintptr_t start, size_t size) {
     // Insert a newly freed region back into the sorted list and then
     // eagerly coalesce with neighboring regions to combat fragmentation.
@@ -377,7 +375,6 @@ void VirtualAllocator::free_region(uintptr_t start, size_t size) {
     // LOG_DEBUG("VirtualAllocator: free_region start=0x%lx size=0x%zx", start, size);
 }
 
-// NOLINTNEXTLINE
 void VirtualAllocator::init(uintptr_t start, size_t length) {
     // Bootstrap the allocator with one big free region that covers the
     // entire virtual heap range. Node pool is pre-expanded once here.

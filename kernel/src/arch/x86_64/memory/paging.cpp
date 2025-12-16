@@ -225,7 +225,6 @@ void TLB::flush_all() {
     }
 }
 
-// NOLINTNEXTLINE
 uintptr_t* PageMap::get_pte(uintptr_t virt_addr, int target_level, bool allocate) {
     uintptr_t curr_table_phys = this->phys_root_addr;
 

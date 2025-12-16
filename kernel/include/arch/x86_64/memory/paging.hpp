@@ -1,12 +1,3 @@
-/**
- * @file paging.hpp
- * @brief Core paging flag constants and TLB management helpers.
- *
- * The `Flag*` constants represent architectural PTE bits used by the
- * paging implementation. `TLB` wraps common invalidation patterns
- * (single-page, context-wide, etc.) behind a simple interface.
- */
-
 #pragma once
 
 #include <cstdint>
@@ -29,16 +20,6 @@ constexpr uint64_t FlagLPAT = 1ULL << 12;
 
 constexpr uint64_t page_mask = 0x000FFFFFFFFFF000ULL;
 
-/**
- * @brief TLB invalidation utility.
- *
- * Abstracts over different invalidation strategies:
- *  - `flush` for a single page.
- *  - `flush_specific` / `flush_context` for PCID-tagged spaces.
- *  - `flush_all` / `flush_hard` as coarse fallbacks.
- *
- * The implementation adapts based on whether INVPCID/PCID are supported.
- */
 class TLB {
    public:
     static bool has_invpcid;

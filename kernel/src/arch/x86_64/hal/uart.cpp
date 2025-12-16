@@ -67,7 +67,7 @@ bool UART16550::init(uint32_t baud_rate) {
     this->write(LINE_CONTROL, LINE_DLAB_STATUS);
 
     // Calculate divisor: base clock (assumed 115200 Hz) / desired baud rate.
-    // NOLINTNEXTLINE
+
     uint16_t divisor = 115200 / (baud_rate);
 
     // Program divisor low and high bytes.

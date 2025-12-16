@@ -1,38 +1,4 @@
-/**
- * @file regs.h
- * @brief Low-level x86_64 CPU register and flag constants.
- *
- * This header centralizes numeric constants related to:
- *  - Interrupt frames pushed by the CPU/ISR stubs.
- *  - Control register (CR0/CR4) bit fields.
- *  - Model Specific Register (MSR) indices and bit flags.
- *  - EFLAGS/RFLAGS and debug register (DR6/DR7) masks.
- *
- * The intent is to decouple raw magic numbers from the rest of the
- * architecture code, so higher-level logic can refer to meaningful
- * names instead of hard-coded literals.
- */
 #pragma once
-
-// Interrupt stack and interrupt-frame layout used by low-level stubs.
-#define INTERRUPT_STACK_SIZE               (4096)
-#define PERCPU_INTERRUPT_STACKS_NMI_OFFSET 0x20e0
-
-#define IFRAME_OFFSET_RDI      (0 * 8)
-#define IFRAME_OFFSET_RSI      (1 * 8)
-#define IFRAME_OFFSET_RBP      (2 * 8)
-#define IFRAME_OFFSET_RBX      (3 * 8)
-#define IFRAME_OFFSET_RDX      (4 * 8)
-#define IFRAME_OFFSET_RCX      (5 * 8)
-#define IFRAME_OFFSET_RAX      (6 * 8)
-#define IFRAME_OFFSET_VECTOR   (7 * 8)
-#define IFRAME_OFFSET_ERR_CODE (8 * 8)
-#define IFRAME_OFFSET_RIP      (9 * 8)
-#define IFRAME_OFFSET_CS       (10 * 8)
-#define IFRAME_OFFSET_RFLAGS   (11 * 8)
-#define IFRAME_OFFSET_RSP      (12 * 8)
-#define IFRAME_OFFSET_USER_SS  (13 * 8)
-#define IFRAME_SIZE            (14 * 8)
 
 #define CR0_PE         0x00000001
 #define CR0_MP         0x00000002

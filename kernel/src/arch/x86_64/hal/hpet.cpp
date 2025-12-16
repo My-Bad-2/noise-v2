@@ -13,7 +13,6 @@ uint32_t HPET::period_fs   = 0;
 uint8_t HPET::num_timers   = 0;
 bool HPET::available       = false;
 
-// NOLINTNEXTLINE
 void HPET::write(size_t reg, size_t val) {
     if (!hpet_base.ptr()) {
         return;
@@ -32,7 +31,6 @@ size_t HPET::read(size_t reg) {
     return hpet_base.read<size_t>(reg);
 }
 
-// NOLINTNEXTLINE
 void HPET::write_timer(uint8_t index, size_t offset, size_t val) {
     size_t reg = HPET_Tn_REG_START + (index * HPET_Tn_REG_STEP) + offset;
     write(reg, val);
@@ -66,7 +64,7 @@ void HPET::init() {
     uintptr_t phys_addr = tbl->address.address;
     uacpi_table_unref(&hpet_table);
 
-    hpet_base = MMIORegion(phys_addr, PAGE_SIZE_4K);
+    hpet_base = MMIORegion(phys_addr, memory::PAGE_SIZE_4K);
 
     size_t caps        = read(HPET_CAPS_ID_REG);
     uint16_t vendor_id = (caps >> 16) & 0xFFFF;
@@ -167,7 +165,6 @@ void HPET::mdelay(size_t ms) {
     ndelay(ms * 1000000);
 }
 
-// NOLINTNEXTLINE
 bool HPET::enable_periodic_timer(uint8_t timer_idx, size_t hz, uint8_t irq_gsi) {
     if (!available || (timer_idx >= num_timers) || (hz == 0)) {
         LOG_WARN("HPET: periodic timer setup failed (available=%d idx=%u hz=%zu)", available,
@@ -215,7 +212,6 @@ bool HPET::enable_periodic_timer(uint8_t timer_idx, size_t hz, uint8_t irq_gsi) 
     return true;
 }
 
-// NOLINTNEXTLINE
 bool HPET::enable_oneshot_timer(uint8_t timer_idx, size_t us_delay, uint8_t irq_gsi) {
     if (!available || (timer_idx >= num_timers)) {
         LOG_WARN("HPET: one-shot timer setup failed (available=%d idx=%u)", available, timer_idx);

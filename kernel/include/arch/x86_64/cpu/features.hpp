@@ -1,19 +1,3 @@
-/**
- * @file features.hpp
- * @brief CPUID feature bit definitions and query helper.
- *
- * The `FEATURE_*` macros encode (leaf, register, bit) triples used to
- * probe CPUID for specific CPU capabilities. They are intended to be
- * used with `check_feature`, e.g.:
- *
- *   if (check_feature(FEATURE_PGE)) { ... }
- *
- * Why:
- *  - Keeps feature probing declarative and centralized.
- *  - Avoids scattering raw CPUID indices and bit positions across the
- *    codebase, which is easy to get wrong and hard to audit.
- */
-
 #pragma once
 
 #define FEATURE_SSE3                0x1, 2, 0
@@ -103,36 +87,8 @@
 #define FEATURE_FPU_SAVE_SIZE       0xD, 0, 2
 
 namespace kernel::arch {
-/**
- * @brief Check whether a given CPUID feature bit is set.
- *
- * This helper wraps `__get_cpuid` and guards against unsupported leaves.
- * Unsupported leaves are treated as "feature absent" so callers can
- * safely gate optional code paths.
- *
- * @param leaf    CPUID leaf value to query (EAX input).
- * @param reg_idx Which result register to inspect:
- *                0 = EAX, 1 = EBX, 2 = ECX, 3 = EDX.
- * @param bit     Bit position inside the chosen register.
- *
- * @return true if CPUID is supported for this leaf and the bit is 1.
- */
 bool check_feature(unsigned int leaf, int reg_idx, int bit);
-
-/**
- * @brief Check a CPUID feature bit in a specific leaf/subleaf pair.
- *
- * Same semantics as the simpler overload, but using `__get_cpuid_count`.
- * Unsupported leaf/subleaf combinations are treated as "feature absent".
- */
 bool check_feature(unsigned int leaf, unsigned int subleaf, int reg_idx, int bit);
 
-/**
- * @brief Return a raw CPUID register value for a leaf/subleaf pair.
- *
- * Mainly intended for higher-level discovery code that needs to read
- * numeric values (e.g. TSC/crystal ratios) rather than boolean flags.
- * Unsupported leaf/subleaf combinations yield 0.
- */
 unsigned int get_cpuid_value(unsigned int leaf, unsigned int subleaf, int reg_idx);
 }  // namespace kernel::arch

@@ -4,7 +4,8 @@
 #include "libs/log.hpp"
 
 namespace kernel::hal {
-// NOLINTNEXTLINE
+using namespace memory;
+
 MMIORegion::MMIORegion(uintptr_t phys_addr, size_t size, memory::CacheType cache) : size(size) {
     uintptr_t offset          = phys_addr % PAGE_SIZE_4K;
     uintptr_t phys_page_start = phys_addr - offset;
@@ -42,7 +43,6 @@ MMIORegion::MMIORegion(uintptr_t phys_addr, size_t size, memory::CacheType cache
 // }
 
 volatile void* MMIORegion::ptr() const {
-    // NOLINTNEXTLINE
     return reinterpret_cast<volatile void*>(this->virt_base);
 }
 }  // namespace kernel::hal

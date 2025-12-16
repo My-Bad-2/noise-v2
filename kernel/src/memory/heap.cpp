@@ -272,7 +272,6 @@ void* kmalloc(size_t size) {
     return kheap.alloc(size);
 }
 
-// NOLINTNEXTLINE
 void* aligned_kalloc(size_t size, size_t alignment) {
     if (alignment == 0 || !is_aligned(alignment, alignment)) {
         return nullptr;

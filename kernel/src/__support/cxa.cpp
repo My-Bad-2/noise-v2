@@ -12,5 +12,4 @@ extern "C" void __cxa_guard_release(__guard* g) {
 extern "C" void __cxa_guard_abort(__guard*) {}
 }  // namespace __cxxabiv1
 
-extern "C" void __cxa_pure_virtual() {
-}
+extern "C" void __cxa_pure_virtual() {}

@@ -66,7 +66,6 @@ void InterruptDispatcher::unregister_handler(uint8_t vector) {
     clear_eoi(vector);
 }
 
-// NOLINTNEXTLINE
 void InterruptDispatcher::map_pci_irq(uint32_t gsi, uint8_t vector, IInterruptHandler* handler,
                                       uint32_t dest_cpu, bool eoi_first) {
     // Install the handler first so that any subsequent interrupt
@@ -88,14 +87,12 @@ void InterruptDispatcher::map_legacy_irq(uint8_t irq, uint8_t vector, IInterrupt
     LOG_INFO("IDT: mapped legacy IRQ %u -> vector %u CPU %u", irq, vector, dest_cpu);
 }
 
-// NOLINTNEXTLINE
 void InterruptDispatcher::unmap_legacy_irq(uint8_t irq, uint8_t vector) {
     hal::IOAPIC::mask_legacy_irq(irq);
     unregister_handler(vector);
     LOG_INFO("IDT: unmapped legacy IRQ %u from vector %u", irq, vector);
 }
 
-// NOLINTNEXTLINE
 void InterruptDispatcher::unmap_pci_irq(uint32_t gsi, uint8_t vector) {
     hal::IOAPIC::mask_gsi(gsi);
     unregister_handler(vector);

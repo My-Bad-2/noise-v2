@@ -3,25 +3,12 @@
 #include "memory/pagemap.hpp"
 
 namespace kernel::hal {
-using namespace kernel::memory;
 
-/**
- * @brief Wrapper for an MMIO mapping into kernel virtual space.
- *
- * MMIORegion reserves and maps a virtual range over a given physical
- * device region, with a specified cache policy. It provides typed
- * `read` and `write` helpers to keep call sites concise.
- *
- * Why:
- *  - Centralizes MMIO mapping policy (alignment, cache attributes).
- *  - Avoids repeating `VirtualManager` and `PageMap` calls for every
- *    device driver.
- */
 class MMIORegion {
    public:
     MMIORegion() : virt_base(0), size(0) {}
 
-    MMIORegion(uintptr_t phys_addr, size_t size, memory::CacheType cache = CacheType::Uncached);
+    MMIORegion(uintptr_t phys_addr, size_t size, memory::CacheType cache = memory::CacheType::Uncached);
 
     template <typename T>
     void write(size_t offset, T value) {

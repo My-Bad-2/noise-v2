@@ -4,19 +4,6 @@
 #include "hal/timer.hpp"
 
 namespace kernel::hal {
-/**
- * @brief Local APIC (LAPIC/x2APIC) abstraction.
- *
- * This wrapper:
- *  - Hides MMIO vs MSR differences between xAPIC and x2APIC.
- *  - Centralizes IPI sending and EOI signaling.
- *  - Exposes calibrated micro/millisecond delay helpers, so the rest of
- *    the kernel does not need to know about LAPIC tick or TSC rates.
- *
- * Readiness:
- *  - `is_ready()` tells clients whether the LAPIC timer has been
- *    calibrated; until then, `Timer` will fall back to the PIT.
- */
 class Lapic {
    public:
     static void init();
@@ -33,19 +20,14 @@ class Lapic {
     static void arm_tsc_deadline(uint64_t target_tsc);
     static void stop_timer();
 
-    /// Calibrate LAPIC and TSC against a known time base.
     static void calibrate();
-    /// Busy-wait for the requested number of microseconds.
     static void udelay(uint32_t us);
-    /// Busy-wait for the requested number of milliseconds.
     static void mdelay(uint32_t ms);
 
-    /// Report whether calibration has completed successfully.
     static bool is_ready() {
         return is_calibrated;
     }
 
-    /// Return a coarse timestamp in nanoseconds derived from the TSC.
     static uint64_t get_ticks_ns();
 
     static const uint32_t get_ticks_ms() {
@@ -68,10 +50,8 @@ class Lapic {
     static bool tsc_deadline_supported;
     static bool is_calibrated;
 
-    /// LAPIC timer ticks per millisecond and microsecond.
     static uint32_t ticks_per_ms;
     static uint32_t ticks_per_us;
-    /// TSC ticks per millisecond (used for get_ticks_ns()).
     static size_t tsc_per_ms;
 };
 }  // namespace kernel::hal

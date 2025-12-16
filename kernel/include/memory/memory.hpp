@@ -10,7 +10,6 @@
 
 namespace kernel::memory {
 namespace __details {
-/// Higher-half direct-map offset (set during memory::init()).
 extern uintptr_t hhdm_offset;
 }  // namespace __details
 
@@ -57,9 +56,5 @@ inline constexpr T from_higher_half(T val) {
 #pragma clang diagnostic pop
 #endif
 
-/**
- * @brief Initialize memory subsystem.
- */
 void init();
-
 }  // namespace kernel::memory
