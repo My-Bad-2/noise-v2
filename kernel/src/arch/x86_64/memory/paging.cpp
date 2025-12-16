@@ -371,15 +371,32 @@ bool PageMap::map(uintptr_t virt_addr, uint8_t flags, CacheType cache, PageSize 
     return true;
 }
 
+bool PageMap::is_table_empty(uintptr_t* table) {
+    for (int i = 0; i < 512; ++i) {
+        if (table[i] & FlagPresent) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 void PageMap::unmap(uintptr_t virt_addr, uint16_t owner_pcid, bool free_phys) {
     uint64_t curr_tbl_phys = this->phys_root_addr;
     int level              = max_levels;
 
+    uintptr_t* path_tables[5] = {nullptr};
+    int path_indices[5]       = {0};
+
     while (level >= 1) {
         uintptr_t* table_virt = reinterpret_cast<uintptr_t*>(to_higher_half(curr_tbl_phys));
 
+        path_tables[level] = table_virt;
+
         int shift = 12 + (level - 1) * 9;
         int index = static_cast<int>((virt_addr >> shift) & 0x1FF);
+
+        path_indices[level] = index;
 
         uint64_t entry = table_virt[index];
 
@@ -417,6 +434,27 @@ void PageMap::unmap(uintptr_t virt_addr, uint16_t owner_pcid, bool free_phys) {
                 } else if (level == 3) {
                     PhysicalManager::free(reinterpret_cast<void*>(phys_addr), 512ull * 512ull);
                 }
+            }
+
+            // We loop from the current level UP to the root (exclusive of root)
+            // If we are at level 1, we check PT. If empty, free it and update table 2.
+            for (int l = level; l < max_levels; l++) {
+                uintptr_t* curr_table = path_tables[l];
+
+                // If this table is not empty, no upper table
+                if (!is_table_empty(curr_table)) {
+                    break;
+                }
+            
+                uintptr_t* parent_table = path_tables[l + 1];
+                int parent_idx          = path_indices[l + 1];
+
+                uint64_t parent_entry = parent_table[parent_idx];
+                uintptr_t table_phys  = parent_entry & page_mask;
+
+                parent_table[parent_idx] = 0;
+
+                PhysicalManager::free(reinterpret_cast<void*>(table_phys));
             }
 
             return;

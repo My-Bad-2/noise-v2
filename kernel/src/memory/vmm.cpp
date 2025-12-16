@@ -154,7 +154,7 @@ void VirtualManager::map_kernel() {
             // LOG_DEBUG("VMM: mapping kernel segment v=0x%lx p=0x%lx size=0x%lx flags=0x%x",
             //   start_aligned, phys_start, size_aligned, seg_flags);
 
-            kernel_pagemap.map_range(start_aligned, phys_start, size_aligned, seg_flags,
+            kernel_pagemap.map_range(start_aligned, phys_start, size_aligned, seg_flags | Global,
                                      CacheType::WriteBack);
         }
     }

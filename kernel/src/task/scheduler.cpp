@@ -45,6 +45,11 @@ void Scheduler::schedule() {
     Process* prev_proc = prev->owner;
     Process* next_proc = next->owner;
 
+    if(prev_proc->map->is_dirty) {
+        prev_proc->map->load();
+        prev_proc->map->is_dirty = false;
+    }
+
     // Nothing to do if we're going to continue running the same thread.
     if (prev == next) {
         if (int_enabled) {
@@ -75,6 +80,7 @@ void Scheduler::schedule() {
         // Switch address space
         if (next_proc) {
             next_proc->map->load();
+            next_proc->map->is_dirty = false;
         }
     }
 

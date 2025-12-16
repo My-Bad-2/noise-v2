@@ -102,13 +102,16 @@ class PageMap {
 
     static PageMap* get_kernel_map();
 
+    bool is_dirty = false;
+
    private:
+    static bool is_table_empty(uintptr_t* table);
+
     uintptr_t* get_pte(uintptr_t virt_addr, int target_level, bool allocate);
     bool is_active() const;
 
     /// Physical address of the root page-table (CR3 value for this map).
     uintptr_t phys_root_addr;
-    bool is_dirty = false;
 };
 
 }  // namespace kernel::memory
