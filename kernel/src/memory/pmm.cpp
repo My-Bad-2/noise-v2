@@ -36,11 +36,12 @@ struct {
     uint_least64_t* bitmap         = nullptr;  // Allocation bitmap (1 bit per page).
     uint_least64_t* summary_bitmap = nullptr;  // Summary bitmap (1 bit per 64 pages).
 
-    size_t total_pages     = 0;  // Total number of managed pages.
-    size_t summary_entries = 0;  // Number of 64-bit entries in the summary bitmap.
-    size_t bitmap_entries  = 0;  // Number of 64-bit entries in the bitmap.
-    size_t free_idx_hint   = 0;  // Hint for next free-page search.
-    size_t used_pages      = 0;  // Number of currently used pages.
+    size_t total_pages        = 0;  // Total number of managed pages.
+    size_t summary_entries    = 0;  // Number of 64-bit entries in the summary bitmap.
+    size_t bitmap_entries     = 0;  // Number of 64-bit entries in the bitmap.
+    size_t used_pages         = 0;  // Number of currently used pages.
+    size_t free_idx_hint      = 0;  // Hint for next free-page search (small allocations)
+    size_t aligned_index_hint = 0;  // Hint for next free-page search (huge allocations)
 
     PhysicalManager::PerCPUCache* cpus = nullptr;
     size_t num_cpus                    = 1;
@@ -109,6 +110,9 @@ void PhysicalManager::cache_refill(PerCPUCache& cache) {
         size_t end   = div_roundup(end_idx, bit_count);
 
         for (size_t s = start; s < end; ++s) {
+            // Prefech the summary bitmap (~2 cache lines)
+            __builtin_prefetch(&pmm_state.summary_bitmap[s + 2], 0, 1);
+
             if (pmm_state.summary_bitmap[s] == ~0ull) {
                 continue;
             }
@@ -124,39 +128,56 @@ void PhysicalManager::cache_refill(PerCPUCache& cache) {
                     return false;
                 }
 
+                // Prefetch the main bitmap (~4 cache lines)
+                __builtin_prefetch(&pmm_state.bitmap[word_idx + 4], 1, 1);
+
                 uint_least64_t word_val = pmm_state.bitmap[word_idx];
 
                 // If word is not full, extract pages
                 if (word_val != ~0ull) {
-                    uint_least64_t inv_word = ~word_val;
-                    bool word_modified      = false;
+                    if (word_val == 0 && (need - collected) >= 64) {
+                        pmm_state.bitmap[word_idx] = ~0ull;  // Mark full
+                        pmm_state.summary_bitmap[s] |= (1ul << block_bit);
 
-                    while (inv_word && (collected < need)) {
-                        int page_bit    = __builtin_ctzll(inv_word);
-                        size_t page_idx = (word_idx * bit_count) + static_cast<size_t>(page_bit);
+                        uint_least64_t base_page = word_idx * bit_count;
 
-                        if (page_idx >= pmm_state.total_pages) {
-                            return true;
+                        for (size_t k = 0; k < bit_count; ++k) {
+                            cache.stack[cache.count++] = (base_page + k) * PAGE_SIZE_4K;
                         }
 
-                        // Add to CPU cache
-                        cache.stack[cache.count++] = page_idx * PAGE_SIZE_4K;
-                        collected++;
+                        collected += bit_count;
+                    } else {
+                        uint_least64_t inv_word = ~word_val;
+                        bool word_modified      = false;
 
-                        // Mark as used
-                        word_val |= (1ul << page_bit);
-                        inv_word &= ~(1ul << page_bit);
+                        while (inv_word && (collected < need)) {
+                            int page_bit = __builtin_ctzll(inv_word);
+                            size_t page_idx =
+                                (word_idx * bit_count) + static_cast<size_t>(page_bit);
 
-                        word_modified = true;
-                    }
+                            if (page_idx >= pmm_state.total_pages) {
+                                return true;
+                            }
 
-                    if (word_modified) {
-                        // Write back to global bitmap
-                        pmm_state.bitmap[word_idx] = word_val;
+                            // Add to CPU cache
+                            cache.stack[cache.count++] = page_idx * PAGE_SIZE_4K;
+                            collected++;
 
-                        // Update summary bitmap
-                        if (word_val == ~0ull) {
-                            pmm_state.summary_bitmap[s] |= (1ul << block_bit);
+                            // Mark as used
+                            word_val |= (1ul << page_bit);
+                            inv_word &= ~(1ul << page_bit);
+
+                            word_modified = true;
+                        }
+
+                        if (word_modified) {
+                            // Write back to global bitmap
+                            pmm_state.bitmap[word_idx] = word_val;
+
+                            // Update summary bitmap
+                            if (word_val == ~0ull) {
+                                pmm_state.summary_bitmap[s] |= (1ul << block_bit);
+                            }
                         }
                     }
 
@@ -208,6 +229,10 @@ void PhysicalManager::cache_flush(PerCPUCache& cache) {
         if (page_idx < pmm_state.free_idx_hint) {
             pmm_state.free_idx_hint = page_idx;
         }
+
+        if (page_idx < pmm_state.aligned_index_hint) {
+            pmm_state.aligned_index_hint = page_idx;
+        }
     }
 }
 
@@ -220,6 +245,8 @@ void* PhysicalManager::alloc_from_bitmap(size_t count) {
         size_t search_start_summary = search_start / bit_count;
 
         for (size_t s = search_start_summary; s < pmm_state.summary_entries; ++s) {
+            __builtin_prefetch(&pmm_state.summary_bitmap[s + 4], 0, 1);
+
             // Each summary entry covers 64 bitmap entries = 4096 pages.
             uint_least64_t summary_entry = pmm_state.summary_bitmap[s];
 
@@ -235,6 +262,7 @@ void* PhysicalManager::alloc_from_bitmap(size_t count) {
 
             // Now verify the actual bitmap word and pick the first free page in it.
             if (map_idx < pmm_state.bitmap_entries) {
+                __builtin_prefetch(&pmm_state.bitmap[map_idx + 8], 0, 1);
                 uint_least64_t entry = pmm_state.bitmap[map_idx];
 
                 if (entry != static_cast<uint_least64_t>(-1)) {
@@ -284,86 +312,9 @@ void* PhysicalManager::alloc_from_bitmap(size_t count) {
                 }
             }
         }
-    } else {
-        // Multi-page allocation: search for a contiguous free run of `count` pages.
-        auto try_allocate_range = [&](size_t start, size_t end) -> void* {
-            size_t consecutive = 0;
-
-            for (size_t i = start; i < end; ++i) {
-                // At page boundaries aligned to 64 pages, we can ask "is this
-                // whole 64‑page chunk full?" via the bitmap, and if so,
-                // optionally ask the summary "is this whole 4096‑page block full?"
-                if ((consecutive == 0) && ((i % bit_count) == 0)) {
-                    size_t map_idx = i / bit_count;
-
-                    if ((map_idx < pmm_state.bitmap_entries) &&
-                        (pmm_state.bitmap[map_idx] == static_cast<size_t>(-1))) {
-                        // Main word is full. If the corresponding summary bit
-                        // says the *entire* 4096‑page block is full, we can
-                        // jump over all of it in one shot.
-                        if ((map_idx % bit_count) == 0) {
-                            size_t summary_idx = map_idx / bit_count;
-
-                            if ((summary_idx < pmm_state.summary_entries) &&
-                                (pmm_state.summary_bitmap[summary_idx] ==
-                                 static_cast<size_t>(-1))) {
-                                // Massive skip: 4096 pages with a single check.
-                                i += (bit_count * bit_count) - 1;
-                                continue;
-                            }
-                        }
-
-                        // Otherwise, just skip this 64‑page word.
-                        i += 63;
-                        continue;
-                    }
-                }
-
-                if (!test_bit(i)) {
-                    consecutive++;
-
-                    if (consecutive == count) {
-                        // Found a block of `count` consecutive free pages.
-                        size_t block_start = i - count + 1;
-
-                        for (size_t j = 0; j < count; ++j) {
-                            set_bit(block_start + j);
-                        }
-
-                        pmm_state.used_pages += count;
-                        pmm_state.free_idx_hint = block_start + count;
-
-                        // LOG_DEBUG("PMM alloc_from_bitmap (range) start=%zu count=%zu",
-                        // block_start,
-                        //   count);
-                        return reinterpret_cast<void*>(block_start * PAGE_SIZE_4K);
-                    }
-                } else {
-                    consecutive = 0;
-                }
-            }
-
-            return nullptr;
-        };
-
-        // Pass 1: Hint -> End.
-        void* res = try_allocate_range(pmm_state.free_idx_hint, pmm_state.total_pages);
-
-        if (res != nullptr) {
-            return res;
-        }
-
-        // Pass 2: 0 -> Hint (wrap around).
-        if (pmm_state.free_idx_hint > 0) {
-            res = try_allocate_range(0, pmm_state.free_idx_hint);
-
-            if (res != nullptr) {
-                return res;
-            }
-        }
     }
 
-    return nullptr;
+    return alloc_aligned(count, PAGE_SIZE_4K);
 }
 
 void* PhysicalManager::alloc(size_t count) {
@@ -417,6 +368,13 @@ void* PhysicalManager::alloc_aligned(size_t count, size_t alignment) {
 
     LockGuard guard(pmm_state.lock);
 
+    size_t start_hint = pmm_state.free_idx_hint;
+
+    // Use the aligned hint if alignment is large
+    if (alignment >= PAGE_SIZE_2M) {
+        start_hint = pmm_state.aligned_index_hint;
+    }
+
     // Two-pass search.
     auto try_alloc = [&](size_t start, size_t end) -> void* {
         size_t curr = align_up(start, pages_per_alignment);
@@ -425,6 +383,17 @@ void* PhysicalManager::alloc_aligned(size_t count, size_t alignment) {
             // Ensure we don't overrun physical memory or the search range.
             if (curr + count > pmm_state.total_pages) {
                 break;
+            }
+
+            if ((curr % bit_count) == 0 && (count >= bit_count)) {
+                size_t summary_idx = curr / bit_count / bit_count;
+
+                if ((summary_idx < pmm_state.summary_entries) &&
+                    (pmm_state.summary_bitmap[summary_idx] == ~0ul)) {
+                    curr += (bit_count * bit_count);
+                    curr = align_up(curr, pages_per_alignment);
+                    continue;
+                }
             }
 
             // Inner scan: Check if `count` pages starting at `curr` are free.
@@ -446,7 +415,11 @@ void* PhysicalManager::alloc_aligned(size_t count, size_t alignment) {
                 }
 
                 pmm_state.used_pages += count;
-                pmm_state.free_idx_hint = curr + count;
+                if (alignment >= PAGE_SIZE_2M) {
+                    pmm_state.aligned_index_hint = curr + count;
+                } else {
+                    pmm_state.free_idx_hint = curr + count;
+                }
 
                 void* addr = reinterpret_cast<void*>(curr * PAGE_SIZE_4K);
                 // LOG_DEBUG("PMM alloc_aligned count=%zu align=0x%zx addr=%p used_pages=%zu",
@@ -460,9 +433,9 @@ void* PhysicalManager::alloc_aligned(size_t count, size_t alignment) {
     };
 
     // Pass 1: Hint -> End.
-    void* res = try_alloc(pmm_state.free_idx_hint, pmm_state.total_pages);
+    void* res = try_alloc(start_hint, pmm_state.total_pages);
 
-    if (res != nullptr) {
+    if (res) {
         return res;
     }
 
@@ -470,7 +443,7 @@ void* PhysicalManager::alloc_aligned(size_t count, size_t alignment) {
     if (pmm_state.free_idx_hint > 0) {
         res = try_alloc(0, pmm_state.free_idx_hint);
 
-        if (res != nullptr) {
+        if (res) {
             return res;
         }
     }
