@@ -1,17 +1,3 @@
-/**
- * @file pmm.cpp
- * @brief Implementation of the physical memory manager.
- *
- * Uses a bitmap to track page allocation state and a small stack-based
- * cache to accelerate single-page allocations and frees.
- *
- * A second-level *summary bitmap* marks which 64-page blocks are fully
- * used, allowing the allocator to skip large contiguous allocated regions
- * quickly when searching for free pages. The intent is to keep scans
- * mostly proportional to the amount of *free* memory rather than the
- * total memory size.
- */
-
 #include "memory/pmm.hpp"
 #include "boot/boot.h"
 #include "cpu/cpu.hpp"
@@ -63,8 +49,7 @@ void PhysicalManager::set_bit(size_t idx) {
     pmm_state.bitmap[byte] |= (1ULL << bit);
 
     // When a 64-page block transitions to "completely full", we mark it
-    // in the summary bitmap. This is what enables the allocator to jump
-    // over entire 64‑page chunks in a single check.
+    // in the summary bitmap.
     if (pmm_state.bitmap[byte] == static_cast<size_t>(-1)) {
         size_t summary_byte = byte / bit_count;
         size_t summary_bit  = byte % bit_count;
@@ -546,7 +531,7 @@ void* PhysicalManager::alloc_clear(size_t count) {
 
 void* PhysicalManager::alloc_dma(size_t count, size_t alignment) {
     if ((count == 0) || (alignment == 0) || (alignment % PAGE_SIZE_4K != 0)) {
-        LOG_WARN("PMM alloc_aligned invalid params count=%zu align=0x%zx", count, alignment);
+        LOG_WARN("PMM alloc_dma invalid params count=%zu align=0x%zx", count, alignment);
         return nullptr;
     }
 
@@ -575,16 +560,16 @@ void* PhysicalManager::alloc_dma(size_t count, size_t alignment) {
 
         bool fit = true;
 
-        for(size_t i = 0; i < count; ++i) {
-            if(test_bit(curr + i)) {
-                fit = false;
+        for (size_t i = 0; i < count; ++i) {
+            if (test_bit(curr + i)) {
+                fit  = false;
                 curr = align_up(curr + i + 1, pages_per_alignment);
                 break;
             }
         }
 
-        if(fit) {
-            for(size_t i = 0; i < count; ++i) {
+        if (fit) {
+            for (size_t i = 0; i < count; ++i) {
                 set_bit(curr + i);
             }
 
@@ -598,22 +583,57 @@ void* PhysicalManager::alloc_dma(size_t count, size_t alignment) {
 }
 
 void PhysicalManager::free_to_bitmap(size_t page_idx, size_t count) {
-    // Free a range of pages in the bitmap.
-    for (size_t i = 0; i < count; ++i) {
-        size_t idx = page_idx + i;
+    size_t curr      = page_idx;
+    size_t remaining = count;
 
-        if (idx < pmm_state.total_pages && test_bit(idx)) {
-            clear_bit(idx);
+    // Free individual bits until 64-page aligned
+    while ((remaining > 0) && (curr % bit_count) != 0) {
+        if ((curr < pmm_state.total_pages) && test_bit(curr)) {
+            clear_bit(curr);
             pmm_state.used_pages--;
         }
+
+        curr++;
+        remaining--;
     }
 
-    if (page_idx < pmm_state.free_idx_hint) {
+    // Free 64 pages at a time using word writes
+    while (remaining >= bit_count) {
+        size_t word_idx = curr / bit_count;
+
+        if (word_idx < pmm_state.bitmap_entries) {
+            uint_least64_t old_val = pmm_state.bitmap[word_idx];
+
+            if (old_val != 0) {
+                const size_t byte = word_idx / bit_count;
+                const size_t bit  = word_idx % bit_count;
+
+                // Count how many bits are flipped from 1->0
+                pmm_state.used_pages -= static_cast<size_t>(__builtin_popcountll(old_val));
+                pmm_state.bitmap[word_idx] = 0;
+
+                pmm_state.summary_bitmap[byte] &= ~(1ul << bit);
+            }
+        }
+
+        curr += bit_count;
+        remaining -= bit_count;
+    }
+
+    // Free remaining individual bits
+    while (remaining > 0) {
+        if ((curr < pmm_state.total_pages) && test_bit(curr)) {
+            clear_bit(curr);
+            pmm_state.used_pages--;
+        }
+
+        curr++;
+        remaining--;
+    }
+
+    // Hint Update
+    if ((page_idx < pmm_state.free_idx_hint) && (page_idx > pmm_state.low_mem_threshold_idx)) {
         pmm_state.free_idx_hint = page_idx;
-    }
-
-    if (page_idx < pmm_state.aligned_index_hint) {
-        pmm_state.aligned_index_hint = page_idx;
     }
 }
 
