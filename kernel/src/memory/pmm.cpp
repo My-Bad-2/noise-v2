@@ -20,6 +20,7 @@
 #include "memory/memory.hpp"
 #include "libs/spinlock.hpp"
 #include "libs/math.hpp"
+#include <stdlib.h>
 #include <string.h>
 #include <cstdint>
 
@@ -211,21 +212,68 @@ void PhysicalManager::cache_refill(PerCPUCache& cache) {
 void PhysicalManager::cache_flush(PerCPUCache& cache) {
     size_t target_count = cache.capacity / 2;
 
-    while (cache.count > target_count) {
-        uintptr_t phys_addr = cache.stack[--cache.count];
+    if (cache.capacity <= target_count) {
+        return;
+    }
+
+    size_t flush_count     = cache.capacity - target_count;
+    uintptr_t* flush_start = &cache.stack[target_count];
+
+    // Sort the addresses in order, so they hit consecutive bitmap words.
+    if (flush_count > 1) {
+        qsort(flush_start, flush_count, sizeof(uintptr_t), [](const void* a, const void* b) -> int {
+            uintptr_t arg1 = *static_cast<const uintptr_t*>(a);
+            uintptr_t arg2 = *static_cast<const uintptr_t*>(b);
+
+            if (arg1 < arg2) {
+                return -1;
+            }
+
+            if (arg1 > arg2) {
+                return 1;
+            }
+
+            return 0;
+        });
+    }
+
+    size_t last_word_idx         = ~0ull;
+    uint_least64_t curr_word_val = 0;
+    bool dirty                   = false;
+
+    for (size_t i = 0; i < flush_count; ++i) {
+        uintptr_t phys_addr = flush_start[i];
         size_t page_idx     = phys_addr / PAGE_SIZE_4K;
 
         if (page_idx >= pmm_state.total_pages) {
             continue;
         }
 
-        if (test_bit(page_idx)) {
-            clear_bit(page_idx);
+        size_t word_idx = page_idx / bit_count;
+        size_t bit_idx  = page_idx % bit_count;
 
-            pmm_state.used_pages--;
+        uint_least64_t mask = (1ul << bit_idx);
+
+        // If we moved to a new word, commit the previous one to the global state
+        if (word_idx != last_word_idx) {
+            if (dirty && (last_word_idx < pmm_state.bitmap_entries)) {
+                const size_t last_word_byte = last_word_idx / bit_count;
+                const size_t last_word_bit  = last_word_idx % bit_count;
+
+                pmm_state.bitmap[last_word_idx] = curr_word_val;
+                pmm_state.summary_bitmap[last_word_byte] &= ~(1ul << last_word_bit);
+            }
+
+            // Load new word
+            last_word_idx = word_idx;
+            curr_word_val = pmm_state.bitmap[word_idx];
+            dirty         = true;
         }
 
-        // Update global allocation hint
+        // Clear the bit in the local copy
+        curr_word_val &= ~mask;
+        pmm_state.used_pages--;
+
         if (page_idx < pmm_state.free_idx_hint) {
             pmm_state.free_idx_hint = page_idx;
         }
@@ -234,6 +282,16 @@ void PhysicalManager::cache_flush(PerCPUCache& cache) {
             pmm_state.aligned_index_hint = page_idx;
         }
     }
+
+    if (dirty && (last_word_idx < pmm_state.bitmap_entries)) {
+        const size_t last_word_byte = last_word_idx / bit_count;
+        const size_t last_word_bit  = last_word_idx % bit_count;
+
+        pmm_state.bitmap[last_word_idx] = curr_word_val;
+        pmm_state.summary_bitmap[last_word_byte] &= ~(1ul << last_word_bit);
+    }
+
+    cache.count = target_count;
 }
 
 void* PhysicalManager::alloc_from_bitmap(size_t count) {
@@ -479,6 +537,10 @@ void PhysicalManager::free_to_bitmap(size_t page_idx, size_t count) {
 
     if (page_idx < pmm_state.free_idx_hint) {
         pmm_state.free_idx_hint = page_idx;
+    }
+
+    if (page_idx < pmm_state.aligned_index_hint) {
+        pmm_state.aligned_index_hint = page_idx;
     }
 }
 
