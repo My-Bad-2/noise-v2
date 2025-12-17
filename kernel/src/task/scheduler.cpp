@@ -1,3 +1,4 @@
+#include <cstdint>
 #include "hal/cpu.hpp"
 #include "hal/timer.hpp"
 #include "libs/log.hpp"
@@ -139,23 +140,16 @@ void Scheduler::schedule() {
     Process* prev_proc = prev->owner;
     Process* next_proc = next->owner;
 
-    if (prev_proc->map->is_dirty) {
-        uint16_t pcid = pcid_manager->get_pcid(prev_proc);
-
-        prev_proc->map->load(pcid);
-        prev_proc->map->is_dirty = false;
-    }
+    uint16_t pcid    = pcid_manager->get_pcid(next_proc);
+    bool needs_flush = (next_proc->pcid_cache[cpu->cpu_id] == static_cast<uint16_t>(-1));
 
     // Switch bookkeeping to the next thread before jumping into assembly.
     cpu->curr_thread   = next;
     next->thread_state = Running;
 
     if ((prev_proc != next_proc) && next_proc) {
-        uint16_t pcid = pcid_manager->get_pcid(prev_proc);
-
         // Switch address space
-        next_proc->map->load();
-        next_proc->map->is_dirty = false;
+        next_proc->map->load(pcid, needs_flush);
     }
 
     context_switch(prev, next);

@@ -16,6 +16,7 @@ class PcidManager {
 
     uint16_t get_pcid(task::Process* proc);
     void free_pcid(uint16_t pcid);
+    void force_invalidate(uint16_t pcid);
 
     static PcidManager& get();
 

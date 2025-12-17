@@ -1,12 +1,14 @@
 #include "memory/pagemap.hpp"
 #include "memory/memory.hpp"
 #include "memory/paging.hpp"
+#include "memory/pcid_manager.hpp"
 #include "memory/pmm.hpp"
 #include "cpu/registers.hpp"
 #include "cpu/regs.h"
 #include "cpu/features.hpp"
 #include "libs/log.hpp"
 #include "libs/math.hpp"
+#include "hal/cpu.hpp"
 
 // PAT Memory Types
 #define PAT_TYPE_UC  0x00ULL  // Uncacheable
@@ -179,12 +181,19 @@ void TLB::flush_specific(uintptr_t virt_addr, uint16_t pcid) {
         desc.rsvd              = 0;
         desc.flush(arch::InvpcidType::IndivdualAddress);
     } else {
-        // for Non-INVPCID systems:
-        // We cannot selectively flush another context without switching to it.
-        // This is handled by the Scheduler later invalidating
-        // that process's PCID on next switch, or by sending an IPI.
-        // For now, force a full flush.
-        flush_hard();
+        if (!cpu::CPUCoreManager::initialized()) {
+            // We're setting up kernel pagemap; return for now
+            // since we will flush the TLB anyway
+            return;
+        }
+
+        // Eviction Notice
+        // Since we cannot just flush this address for the inactive PCID.
+        // so we invalidate the PCID entirely. The next time this process
+        // runs, it will be forced to flush everything.
+        cpu::PerCPUData* cpu     = cpu::CPUCoreManager::get_curr_cpu();
+        memory::PcidManager* mgr = cpu->pcid_manager;
+        mgr->force_invalidate(pcid);
     }
 }
 
@@ -202,11 +211,19 @@ void TLB::flush_context(uint16_t pcid) {
             // Flush the current context.
             cr3.write();
         } else {
-            // We need to flush an inactive pcid, since we
-            // lack the hardware instruction and a scheduler
-            // to defer it. We must nuke the entire TLB to
-            // ensure that the target PCID is clean.
-            flush_hard();
+            if (!cpu::CPUCoreManager::initialized()) {
+                // We're setting up kernel pagemap; return for now
+                // since we will flush the TLB anyway
+                return;
+            }
+
+            // Eviction Notice
+            // Since we cannot just flush this address for the inactive PCID.
+            // so we invalidate the PCID entirely. The next time this process
+            // runs, it will be forced to flush everything.
+            cpu::PerCPUData* cpu     = cpu::CPUCoreManager::get_curr_cpu();
+            memory::PcidManager* mgr = cpu->pcid_manager;
+            mgr->force_invalidate(pcid);
         }
     }
 }
@@ -314,7 +331,10 @@ bool PageMap::map(uintptr_t virt_addr, uintptr_t phys_addr, uint8_t flags, Cache
             TLB::flush(virt_addr);
         }
     } else {
-        this->is_dirty = true;
+        if (do_flush) {
+            uint16_t pcid = this->get_root_phys() & 0xFFF;
+            TLB::flush_specific(virt_addr, pcid);
+        }
     }
 
     return true;
@@ -535,21 +555,18 @@ void PageMap::create_new(PageMap* map) {
     }
 
     map->phys_root_addr = reinterpret_cast<uintptr_t>(root_phys);
-    map->is_dirty       = true;
     LOG_DEBUG("PageMap::create_new root_phys=0x%lx kernel_initialized=%d", map->phys_root_addr,
               kernel_initialized);
 }
 
-void PageMap::load(uint16_t pcid) {
+void PageMap::load(uint16_t pcid, bool flush) {
     arch::Cr3 cr3 = {};
     cr3.raw       = this->phys_root_addr;
 
     if (pcid_supported) {
         cr3.pcid_enabled.pcid = pcid & 0xFFF;
 
-        if (this->is_dirty) {
-            this->is_dirty = false;
-        } else {
+        if (!flush) {
             // Set bit 63 to prevent CPU from flushing a
             // valid TLB for this PCID
             cr3.pcid_enabled.no_flush = true;

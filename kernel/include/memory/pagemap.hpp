@@ -39,7 +39,7 @@ class PageMap {
     void unmap(uintptr_t virt_addr, uint16_t owner_pcid = 0, bool free_phys = false);
     uintptr_t translate(uintptr_t virt_addr);
 
-    void load(uint16_t pcid = 0);
+    void load(uint16_t pcid = 0, bool flush = true);
 
     uintptr_t get_root_phys() const {
         return this->phys_root_addr;
@@ -49,8 +49,6 @@ class PageMap {
     uint8_t get_protection_key(uintptr_t virt_addr, PageSize size = PageSize::Size4K);
 
     static PageMap* get_kernel_map();
-
-    bool is_dirty = false;
 
    private:
     static bool is_table_empty(uintptr_t* table);
