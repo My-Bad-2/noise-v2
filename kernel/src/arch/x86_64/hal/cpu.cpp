@@ -72,4 +72,8 @@ void arch::CPUData::commit_state(PerCPUData* cpu) {
 
     ::kernel::arch::enable_interrupts();
 }
+
+void CPUCoreManager::send_ipi(uint32_t id, uint8_t vector) {
+    hal::Lapic::send_ipi(id, vector);
+}
 }  // namespace kernel::cpu

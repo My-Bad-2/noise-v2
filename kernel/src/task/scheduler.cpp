@@ -29,21 +29,83 @@ void Scheduler::add_thread(Thread* t) {
     }
 
     t->thread_state = Ready;
+    t->cpu          = cpu::CPUCoreManager::get_cpu(this->cpu_id);
+
     this->ready_queue[t->priority].push_back(t);
+    this->active_queues_bitmap |= (1 << t->priority);
 }
 
 Thread* Scheduler::get_next_thread() {
     // Pick thread from the highest priority none-empty queue
-    for (int i = 0; i < MLFQ_LEVELS; ++i) {
-        if (!this->ready_queue[i].empty()) {
-            Thread* t = this->ready_queue[i].front();
-            this->ready_queue[i].pop_front();
-            return t;
+    if (this->active_queues_bitmap != 0) {
+        int highest_prio = __builtin_ctz(this->active_queues_bitmap);
+
+        Thread* t = this->ready_queue[highest_prio].front();
+        this->ready_queue[highest_prio].pop_front();
+
+        if (this->ready_queue[highest_prio].empty()) {
+            active_queues_bitmap &= ~(1u << highest_prio);
+        }
+
+        return t;
+    }
+
+    // Local Queues Empty? Try stealing
+    if (Thread* stolen = this->try_steal()) {
+        return stolen;
+    }
+
+    // Give up -> Idle
+    return cpu::CPUCoreManager::get_cpu(this->cpu_id)->idle_thread;
+}
+
+Thread* Scheduler::try_steal() {
+    // Iterate over all other CPUs
+    uint32_t max_cpus = cpu::CPUCoreManager::get_core_count();
+
+    for (uint32_t i = 0; i < max_cpus; ++i) {
+        if (i == this->cpu_id) {
+            // Don't steal from your own house
+            continue;
+        }
+
+        cpu::PerCPUData* victim_cpu = cpu::CPUCoreManager::get_cpu(i);
+        Scheduler& victim_sched     = victim_cpu->sched;
+
+        // Use `try_lock()` to avoid deadlock
+        // If core A tries to steal from B, and B from A, locking hangs the kernel.
+        if (victim_sched.lock.try_lock()) {
+            Thread* stolen = nullptr;
+
+            // Take from the tail of the highest priority queue available.
+            // Ideally, we want to help with the most important work, but taking from tail
+            // minimizes cache thrashing for the victim.
+            if (victim_sched.active_queues_bitmap != 0) {
+                int p = __builtin_ctz(victim_sched.active_queues_bitmap);
+
+                // We found a queue. Steal the tail.
+                if (!victim_sched.ready_queue[p].empty()) {
+                    stolen = victim_sched.ready_queue[p].back();
+                    victim_sched.ready_queue[p].pop_back();
+
+                    // Update victim's bitmap
+                    if (victim_sched.ready_queue[p].empty()) {
+                        victim_sched.active_queues_bitmap &= ~(1u << p);
+                    }
+                }
+            }
+
+            victim_sched.lock.unlock();
+
+            if (stolen) {
+                // Migrate the thread to this cpu
+                stolen->cpu = cpu::CPUCoreManager::get_cpu(this->cpu_id);
+                return stolen;
+            }
         }
     }
 
-    // No runnable threads, fall back to the per-CPU idle thread.
-    return cpu::CPUCoreManager::get_curr_cpu()->idle_thread;
+    return nullptr;
 }
 
 bool Scheduler::check_for_higher_priority(int curr_level) {
@@ -62,7 +124,7 @@ void Scheduler::schedule() {
     bool int_enabled = arch::interrupt_status();
     arch::disable_interrupts();
 
-    cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_curr_cpu();
+    cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_cpu(this->cpu_id);
     Thread* prev         = cpu->curr_thread;
 
     // Select the next runnable thread under the scheduler lock.
@@ -91,12 +153,6 @@ void Scheduler::schedule() {
     cpu->curr_thread   = next;
     next->thread_state = Running;
 
-    if (prev->tid != next->tid) {
-        LOG_DEBUG("Scheduler: context switch T%lu (%s) -> T%lu (%s) [prio=%u]", prev->tid,
-                  (prev->thread_state == ThreadState::Zombie) ? "Zombie" : "Ready", next->tid,
-                  "Running", next->priority);
-    }
-
     if ((prev_proc != next_proc) && next_proc) {
         // Switch address space
         next_proc->map->load();
@@ -114,12 +170,12 @@ cpu::IrqStatus Scheduler::tick() {
     total_ticks++;
 
     {
+        // Wake up Local Sleeper cells
         LockGuard guard(this->lock);
 
         while (!this->sleeping_queue.empty()) {
             Thread* t = this->sleeping_queue.top();
-
-            if (!t || (t->wake_time_ticks > total_ticks)) {
+            if (!t || t->wake_time_ticks > total_ticks) {
                 break;
             }
 
@@ -132,7 +188,7 @@ cpu::IrqStatus Scheduler::tick() {
         }
     }
 
-    cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_curr_cpu();
+    cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_cpu(this->cpu_id);
     Thread* curr         = cpu->curr_thread;
 
     if (curr == cpu->idle_thread) {
@@ -156,19 +212,18 @@ cpu::IrqStatus Scheduler::tick() {
         curr->thread_state = Ready;
 
         this->ready_queue[curr->priority].push_back(curr);
+        this->active_queues_bitmap |= (1 << curr->priority);
 
         guard.unlock();
         this->schedule();
-        return cpu::IrqStatus::Handled;
-    }
+    } else {
+        LockGuard guard(this->lock);
+        bool higher_priority_ready = this->check_for_higher_priority(curr->priority);
 
-    LockGuard guard(this->lock);
-    bool higher_priority_ready = this->check_for_higher_priority(curr->priority);
-
-    if (higher_priority_ready) {
-        guard.unlock();
-        this->yield();
-        guard.lock();
+        if (higher_priority_ready) {
+            guard.unlock();
+            this->yield();
+        }
     }
 
     return cpu::IrqStatus::Handled;
@@ -188,12 +243,27 @@ void Scheduler::boost_all() {
 
             this->ready_queue[0].push_back(t);
         }
+
+        // Clear bit for empty queue
+        this->active_queues_bitmap &= ~(1u << i);
+    }
+
+    // Set bit for queue 0 (if we moved anything)
+    if (!this->ready_queue[0].empty()) {
+        active_queues_bitmap |= (1 << 0);
+    }
+
+    // Boost current thread too
+    Thread* curr = cpu::CPUCoreManager::get_cpu(this->cpu_id)->curr_thread;
+    if (curr && curr != cpu::CPUCoreManager::get_cpu(this->cpu_id)->idle_thread) {
+        curr->priority = 0;
+        curr->quantum  = TIME_SLICE_QUANTA[0];
     }
 }
 
 void Scheduler::sleep(size_t ms) {
     arch::disable_interrupts();
-    cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_curr_cpu();
+    cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_cpu(this->cpu_id);
     Thread* curr         = cpu->curr_thread;
 
     // Calculate wake time
@@ -209,12 +279,13 @@ void Scheduler::sleep(size_t ms) {
 
 void Scheduler::yield() {
     // Voluntary yield from the current thread back into the scheduler.
-    cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_curr_cpu();
+    cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_cpu(this->cpu_id);
     Thread* curr         = cpu->curr_thread;
 
     curr->thread_state = Ready;
 
     lock.lock();
+    this->active_queues_bitmap |= (1 << curr->priority);
     this->ready_queue[curr->priority].push_back(curr);
     lock.unlock();
 
@@ -225,7 +296,7 @@ void Scheduler::block() {
     // Block the current thread and reschedule.
     arch::disable_interrupts();
 
-    cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_curr_cpu();
+    cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_cpu(this->cpu_id);
     Thread* curr         = cpu->curr_thread;
 
     curr->thread_state = ThreadState::Blocked;
@@ -247,15 +318,31 @@ void Scheduler::block() {
 }
 
 void Scheduler::unblock(Thread* t) {
-    // Just add it back
-    this->add_thread(t);
+    Scheduler& target_sched = t->cpu->sched;
+
+    if (&target_sched == this) {
+        this->add_thread(t);
+    } else {
+        target_sched.lock.lock();
+        t->thread_state = Ready;
+
+        if (t->quantum <= 0) {
+            t->quantum = TIME_SLICE_QUANTA[t->priority];
+        }
+
+        target_sched.ready_queue[t->priority].push_back(t);
+        target_sched.active_queues_bitmap |= (1 << t->priority);
+        target_sched.lock.unlock();
+
+        // TODO: send IPI to t->cpu->id
+    }
 }
 
 void Scheduler::terminate() {
     // Terminate the current thread and switch to the next runnable one.
     arch::disable_interrupts();
 
-    cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_curr_cpu();
+    cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_cpu(this->cpu_id);
     Thread* curr         = cpu->curr_thread;
 
     curr->thread_state = Zombie;
@@ -273,26 +360,24 @@ void Scheduler::terminate() {
 }
 
 Scheduler& Scheduler::get() {
-    // Singleton-style accessor used throughout the kernel.
-    static Scheduler* sched = nullptr;
-
-    if (sched != nullptr) {
-        return *sched;
-    }
-
-    sched = new Scheduler;
-    return *sched;
+    return cpu::CPUCoreManager::get_curr_cpu()->sched;
 }
 
-void Scheduler::init() {
-    hal::Timer& timer = hal::Timer::get();
+void Scheduler::init(uint32_t id) {
+    if (id == 0) {
+        hal::Timer& timer = hal::Timer::get();
 
-    timer.schedule(
-        hal::TimerMode::Periodic, PRIORITY_BOOST_INTERVAL,
-        [](void*) {
-            Scheduler& sched = Scheduler::get();
-            sched.boost_all();
-        },
-        nullptr);
+        timer.schedule(
+            hal::TimerMode::Periodic, PRIORITY_BOOST_INTERVAL,
+            [](void*) {
+                Scheduler& sched = Scheduler::get();
+                sched.boost_all();
+            },
+            nullptr);
+    }
+
+    this->cpu_id               = id;
+    this->active_queues_bitmap = 0;
+    this->ready_queue          = new Deque<Thread*>[MLFQ_LEVELS];
 }
 }  // namespace kernel::task

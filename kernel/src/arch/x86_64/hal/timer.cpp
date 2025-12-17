@@ -96,15 +96,14 @@ void Timer::stop() {
 }
 
 cpu::IrqStatus Timer::handle(cpu::arch::TrapFrame* frame) {
-    this->manager->tick();
+    this->manager.tick();
 
     task::Scheduler& sched = task::Scheduler::get();
     return sched.tick();
 }
 
 void Timer::init() {
-    Timer& timer  = timer.get();
-    timer.manager = new TimerManager;
+    Timer& timer = timer.get();
 
     if (Lapic::is_ready()) {
         setup_lapic(1, &timer);

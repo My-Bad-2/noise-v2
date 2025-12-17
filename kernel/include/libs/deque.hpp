@@ -332,6 +332,7 @@ class Deque {
     void push_back(const T& value) {
         this->emplace_back(value);
     }
+
     void push_back(T&& value) {
         this->emplace_back(std::move(value));
     }

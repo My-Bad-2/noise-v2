@@ -26,15 +26,18 @@ struct Scheduler {
     void add_thread(Thread* t);
     cpu::IrqStatus tick();
 
-    static void init();
+    void init(uint32_t id);
     static Scheduler& get();
 
    private:
     Thread* get_next_thread();
     bool check_for_higher_priority(int curr_level);
+    Thread* try_steal();
 
     SpinLock lock;
-    Deque<Thread*> ready_queue[MLFQ_LEVELS];
+    Deque<Thread*>* ready_queue;
     MinHeap<Thread*> sleeping_queue;
+    uint32_t cpu_id;
+    uint32_t active_queues_bitmap;
 };
 }  // namespace kernel::task

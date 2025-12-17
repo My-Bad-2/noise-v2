@@ -58,7 +58,7 @@ class Timer : public cpu::IInterruptHandler {
     cpu::IrqStatus handle(cpu::arch::TrapFrame* frame) override;
 
     uint32_t schedule(TimerMode mode, size_t ticks, TimerCallback callback, void* data) {
-        return this->manager->schedule(mode, ticks, callback, data);
+        return this->manager.schedule(mode, ticks, callback, data);
     }
 
     static size_t get_ticks_ns();
@@ -71,6 +71,6 @@ class Timer : public cpu::IInterruptHandler {
 
    private:
     static void stop();
-    TimerManager* manager;
+    TimerManager manager;
 };
 }  // namespace kernel::hal
