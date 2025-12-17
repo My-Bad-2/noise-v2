@@ -17,11 +17,8 @@ extern "C" void kmain() {
     arch::init();
     cpu::CPUCoreManager::init_core(0, 0);
 
-    hal::Timer& timer = hal::Timer::get();
-    timer.init();
-
-    task::Scheduler& sched = task::Scheduler::get();
-    sched.init();
+    hal::Timer::init();
+    task::Scheduler::init();
 
     LOG_INFO("Hello, World!");
 }

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include "memory/pagemap.hpp"
 
 namespace kernel::memory {

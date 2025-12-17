@@ -12,15 +12,13 @@
 
 namespace kernel::hal {
 namespace {
-Timer timer;
-
 void setup_lapic(uint32_t period_ms, cpu::IInterruptHandler* handler) {
+    cpu::arch::InterruptDispatcher::register_handler(TIMER_VECTOR, handler, true);
+
     Lapic::configure_timer(TIMER_VECTOR, Periodic);
 
     uint32_t ticks = period_ms * Lapic::get_ticks_ms();
     Lapic::start_timer(ticks);
-
-    cpu::arch::InterruptDispatcher::register_handler(TIMER_VECTOR, handler, true);
 }
 
 void setup_hpet(uint32_t period_ms, cpu::IInterruptHandler* handler) {
@@ -77,7 +75,7 @@ void Timer::mdelay(uint32_t ms) {
 
 size_t Timer::get_ticks_ns() {
     // Prefer per-core TSC-derived time when the LAPIC timer has been
-    // calibrated; it is cheap and monotonic on modern CPUs.
+    // calibrated; it is cheap and monotonic
     if (Lapic::is_ready()) {
         return Lapic::get_ticks_ns();
     }
@@ -87,7 +85,7 @@ size_t Timer::get_ticks_ns() {
         return HPET::get_ns();
     }
 
-    // No calibrated time source yet; callers should treat 0 as "unknown".
+    // No calibrated time source yet
     return 0;
 }
 
@@ -105,19 +103,21 @@ cpu::IrqStatus Timer::handle(cpu::arch::TrapFrame* frame) {
 }
 
 void Timer::init() {
-    this->manager = new TimerManager;
+    Timer& timer = timer.get();
+    timer.manager = new TimerManager;
 
     if (Lapic::is_ready()) {
-        setup_lapic(1, this);
+        setup_lapic(1, &timer);
     } else if (HPET::is_available()) {
-        setup_hpet(1, this);
+        setup_hpet(1, &timer);
     } else {
         LOG_DEBUG("Timer: using PIT because LAPIC/HPET are not usable");
-        setup_pit(1, this);
+        setup_pit(1, &timer);
     }
 }
 
 Timer& Timer::get() {
+    static Timer timer;
     return timer;
 }
 }  // namespace kernel::hal

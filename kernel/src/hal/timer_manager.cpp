@@ -40,7 +40,7 @@ void TimerManager::tick() {
 
         TimerEvent current;
 
-        if (this->events.extract_min(current)) {
+        if (!this->events.extract_min(current)) {
             break;
         }
 

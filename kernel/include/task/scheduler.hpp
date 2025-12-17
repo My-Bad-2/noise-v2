@@ -24,8 +24,7 @@ struct Scheduler {
     void add_thread(Thread* t);
     cpu::IrqStatus tick();
 
-    void init();
-
+    static void init();
     static Scheduler& get();
 
    private:

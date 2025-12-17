@@ -55,16 +55,18 @@ class Timer : public cpu::IInterruptHandler {
         return "Timer";
     }
 
-    void init();
+    cpu::IrqStatus handle(cpu::arch::TrapFrame* frame) override;
+
     uint32_t schedule(TimerMode mode, size_t ticks, TimerCallback callback, void* data) {
         return this->manager->schedule(mode, ticks, callback, data);
     }
 
-    cpu::IrqStatus handle(cpu::arch::TrapFrame* frame) override;
-
     static size_t get_ticks_ns();
+    
     static void udelay(uint32_t us);
     static void mdelay(uint32_t ms);
+    
+    static void init();
     static Timer& get();
 
    private:
