@@ -835,7 +835,7 @@ void PhysicalManager::init() {
 
     uintptr_t metadata_virt_addr = to_higher_half(reinterpret_cast<uintptr_t>(metadata_phys));
 
-    // Layout: [bitmap][summary bitmap][stack cache]
+    // Layout: [bitmap][summary bitmap][cpu cache][cpu stack cache]
     pmm_state.bitmap = reinterpret_cast<uintptr_t*>(metadata_virt_addr);
 
     pmm_state.summary_bitmap = reinterpret_cast<uintptr_t*>(metadata_virt_addr + bitmap_bytes);
