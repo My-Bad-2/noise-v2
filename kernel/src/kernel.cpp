@@ -1,12 +1,10 @@
 #include "arch.hpp"
 #include "hal/acpi.hpp"
 #include "libs/log.hpp"
-#include "libs/spinlock.hpp"
 #include "memory/memory.hpp"
 #include "hal/cpu.hpp"
 #include "task/process.hpp"
 #include "hal/timer.hpp"
-#include "task/scheduler.hpp"
 
 namespace kernel {
 extern "C" void kmain() {

@@ -8,8 +8,6 @@
 #include "cpu/registers.hpp"
 #include "task/scheduler.hpp"
 
-#define ACPI_SPURIOUS_VECTOR 0xFF
-
 namespace kernel::cpu::arch {
 namespace {
 uint64_t eoi_bitmap[4];
@@ -107,7 +105,7 @@ void InterruptDispatcher::dispatch(TrapFrame* frame) {
 
     // ACPI spurious interrupts (often vector 0xFF) are ignored by design:
     // they signal an edge that did not correspond to a real device event.
-    if (vector == ACPI_SPURIOUS_VECTOR) {
+    if (vector == ACPI_SPURIOUS_INTERRUPT) {
         LOG_DEBUG("IDT: spurious interrupt on vector 0x%02x ignored", vector);
         return;
     }

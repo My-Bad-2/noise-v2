@@ -1,11 +1,5 @@
-#include "task/scheduler.hpp"
-#include "arch.hpp"
 #include "hal/cpu.hpp"
-#include "hal/interface/interrupt.hpp"
 #include "hal/timer.hpp"
-#include "libs/log.hpp"
-#include "libs/spinlock.hpp"
-#include "task/process.hpp"
 
 // Low-level context switch routine implemented in architecture-specific assembly.
 extern "C" void context_switch(kernel::task::Thread* prev, kernel::task::Thread* next);
@@ -323,12 +317,13 @@ void Scheduler::block() {
 }
 
 void Scheduler::unblock(Thread* t) {
-    Scheduler& target_sched = t->cpu->sched;
+    // Target acquired
+    cpu::PerCPUData* target_cpu = t->cpu;
+    Scheduler& target_sched     = target_cpu->sched;
 
-    if (&target_sched == this) {
-        this->add_thread(t);
-    } else {
-        target_sched.lock.lock();
+    {
+        LockGuard guard(target_sched.lock);
+
         t->thread_state = Ready;
 
         if (t->quantum <= 0) {
@@ -337,9 +332,18 @@ void Scheduler::unblock(Thread* t) {
 
         target_sched.ready_queue[t->priority].push_back(t);
         target_sched.active_queues_bitmap |= (1 << t->priority);
-        target_sched.lock.unlock();
+    }
 
-        // TODO: send IPI to t->cpu->id
+    // If thread is on a different CPU, we might need to wake it up immediately
+    if (target_cpu->cpu_id != this->cpu_id) {
+        // Only send IPI if the new thread is important.
+        int current_prio = target_cpu->curr_thread->priority;
+
+        bool is_idle = (target_cpu->curr_thread == target_cpu->idle_thread);
+
+        if (is_idle || (t->priority < current_prio)) {
+            cpu::CPUCoreManager::send_ipi(target_cpu->cpu_id, IPI_RESCHEDULE_VECTOR);
+        }
     }
 }
 
@@ -379,6 +383,8 @@ void Scheduler::init(uint32_t id) {
                 sched.boost_all();
             },
             nullptr);
+
+        register_reschedule_handler();
     }
 
     this->cpu_id               = id;

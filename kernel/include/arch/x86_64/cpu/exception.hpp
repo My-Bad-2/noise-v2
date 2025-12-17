@@ -29,6 +29,9 @@
 #define PLATFORM_INTERRUPT_BASE 32
 #define PLATFORM_INTERRUPT_MAX  255
 
+#define IPI_RESCHEDULE_VECTOR   252
+#define ACPI_SPURIOUS_INTERRUPT 255
+
 namespace kernel::cpu::arch {
 struct TrapFrame {
     uint64_t r15, r14, r13, r12, r11, r10, r9, r8;

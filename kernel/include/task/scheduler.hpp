@@ -41,4 +41,6 @@ struct Scheduler {
     uint32_t active_queues_bitmap;
     volatile size_t current_ticks = 0;
 };
+
+void register_reschedule_handler();
 }  // namespace kernel::task

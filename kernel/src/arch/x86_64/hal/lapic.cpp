@@ -372,14 +372,21 @@ void Lapic::send_eoi() {
 }
 
 void Lapic::send_ipi(uint32_t dest_id, uint8_t vector) {
+    // Wait for delivery status to be Idle; While strictly not
+    // required for x2APIC, it's a good practice for older xAPIC.
+    while (read(LAPIC_ICR_LOW) & APIC_DELIVERY_STATUS) {
+        arch::pause();
+    }
+
     if (x2apic_active) {
         arch::Msr msr;
         msr.index = X2APIC_MSR_BASE + (LAPIC_ICR_LOW >> 4);
-        msr.value = (static_cast<uint64_t>(dest_id) << 32) | vector | APIC_DELIVERY_FIXED;
+        msr.value = (static_cast<uint64_t>(dest_id) << 32) | vector | APIC_DELIVERY_FIXED |
+                    APIC_DELIVERY_ASSERT;
         msr.write();
     } else {
         write(LAPIC_ICR_HIGH, dest_id << 24);
-        write(LAPIC_ICR_LOW, vector | APIC_DELIVERY_FIXED);
+        write(LAPIC_ICR_LOW, vector | APIC_DELIVERY_FIXED | APIC_DELIVERY_ASSERT);
     }
 }
 
