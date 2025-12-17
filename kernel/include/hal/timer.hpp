@@ -62,10 +62,10 @@ class Timer : public cpu::IInterruptHandler {
     }
 
     static size_t get_ticks_ns();
-    
+
     static void udelay(uint32_t us);
     static void mdelay(uint32_t ms);
-    
+
     static void init();
     static Timer& get();
 

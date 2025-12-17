@@ -17,7 +17,8 @@ enum ThreadState : uint32_t {
     Running   = (1 << 1),
     Blocked   = (1 << 2),
     Suspended = (1 << 3),
-    Zombie    = (1 << 4),
+    Sleeping  = (1 << 4),
+    Zombie    = (1 << 5),
 };
 
 struct Process {
@@ -49,6 +50,8 @@ struct Thread {
     ThreadState thread_state;
     uint16_t priority;
     uint16_t quantum;
+
+    size_t wake_time_ticks;
 
     Thread() = default;
     Thread(Process* parent, void (*callback)(void*), void* args);

@@ -103,7 +103,7 @@ cpu::IrqStatus Timer::handle(cpu::arch::TrapFrame* frame) {
 }
 
 void Timer::init() {
-    Timer& timer = timer.get();
+    Timer& timer  = timer.get();
     timer.manager = new TimerManager;
 
     if (Lapic::is_ready()) {
