@@ -1,5 +1,7 @@
 #include "hal/cpu.hpp"
 #include "hal/timer.hpp"
+#include "libs/log.hpp"
+#include "memory/pcid_manager.hpp"
 
 // Low-level context switch routine implemented in architecture-specific assembly.
 extern "C" void context_switch(kernel::task::Thread* prev, kernel::task::Thread* next);
@@ -116,8 +118,9 @@ void Scheduler::schedule() {
     bool int_enabled = arch::interrupt_status();
     arch::disable_interrupts();
 
-    cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_cpu(this->cpu_id);
-    Thread* prev         = cpu->curr_thread;
+    cpu::PerCPUData* cpu              = cpu::CPUCoreManager::get_cpu(this->cpu_id);
+    memory::PcidManager* pcid_manager = cpu->pcid_manager;
+    Thread* prev                      = cpu->curr_thread;
 
     // Select the next runnable thread under the scheduler lock.
     lock.lock();
@@ -137,7 +140,9 @@ void Scheduler::schedule() {
     Process* next_proc = next->owner;
 
     if (prev_proc->map->is_dirty) {
-        prev_proc->map->load();
+        uint16_t pcid = pcid_manager->get_pcid(prev_proc);
+
+        prev_proc->map->load(pcid);
         prev_proc->map->is_dirty = false;
     }
 
@@ -146,6 +151,8 @@ void Scheduler::schedule() {
     next->thread_state = Running;
 
     if ((prev_proc != next_proc) && next_proc) {
+        uint16_t pcid = pcid_manager->get_pcid(prev_proc);
+
         // Switch address space
         next_proc->map->load();
         next_proc->map->is_dirty = false;
@@ -205,7 +212,7 @@ cpu::IrqStatus Scheduler::tick() {
         curr->thread_state = Ready;
 
         this->ready_queue[curr->priority].push_back(curr);
-        this->active_queues_bitmap |= (1 << curr->priority);
+        this->active_queues_bitmap |= (1u << curr->priority);
 
         guard.unlock();
         this->schedule();

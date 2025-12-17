@@ -3,6 +3,8 @@
 #include "libs/log.hpp"
 #include "libs/spinlock.hpp"
 #include "memory/pagemap.hpp"
+#include "boot/boot.h"
+#include "memory/pcid_manager.hpp"
 
 namespace kernel::task {
 namespace {
@@ -31,11 +33,26 @@ Thread::Thread(Process* proc, void (*callback)(void*), void* args) {
 }
 
 Process::Process(memory::PageMap* map) {
+    static bool kernel_proc_init = false;
+
+    if (kernel_proc_init) {
+        PANIC("Call Process::Process(memory::PageMap*) only once");
+    }
+
     lock.lock();
     this->pid = next_pid++;
     lock.unlock();
 
     this->map = map;
+
+    // Array to store the PIC assigned to this process on each CPU.
+    this->pcid_cache = new uint16_t[mp_request.response->cpu_count];
+
+    for (uint16_t i = 0; i < mp_request.response->cpu_count; ++i) {
+        this->pcid_cache[i] = 0;
+    }
+
+    kernel_proc_init = true;
 }
 
 Process::Process() {
@@ -45,6 +62,23 @@ Process::Process() {
 
     this->map = new memory::PageMap;
     memory::PageMap::create_new(this->map);
+
+    // Array to store the PIC assigned to this process on each CPU.
+    this->pcid_cache = new uint16_t[mp_request.response->cpu_count];
+
+    for (uint16_t i = 0; i < mp_request.response->cpu_count; ++i) {
+        this->pcid_cache[i] = static_cast<uint16_t>(-1);
+    }
+}
+
+Process::~Process() {
+    for (size_t i = 0; i < mp_request.response->cpu_count; ++i) {
+        uint16_t id = this->pcid_cache[i];
+
+        if (id > 0) {
+            memory::PcidManager::get().free_pcid(id);
+        }
+    }
 }
 
 void Process::init() {

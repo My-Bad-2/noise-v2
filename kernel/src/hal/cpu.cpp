@@ -3,6 +3,7 @@
 #include "libs/log.hpp"
 #include "arch.hpp"
 #include "libs/vector.hpp"
+#include "memory/pcid_manager.hpp"
 #include "task/process.hpp"
 #include "task/scheduler.hpp"
 
@@ -31,11 +32,13 @@ PerCPUData* CPUCoreManager::init_core(uint32_t cpu_id, uintptr_t stack_top) {
     cpu->idle_thread = new task::Thread(task::kernel_proc, idle_loop, nullptr);
     cpu->curr_thread = cpu->idle_thread;
 
+    cpu->pcid_manager              = new memory::PcidManager;
     cpu->idle_thread->thread_state = task::Running;
 
     smp_initialized = true;
     cpus.push_back(cpu);
     cpu->sched.init(cpu_id);
+    cpu->pcid_manager->init();
 
     LOG_INFO("CPU: initialized core id=%u per_cpu=%p stack_top=0x%lx", cpu_id, cpu, stack_top);
     return cpu;

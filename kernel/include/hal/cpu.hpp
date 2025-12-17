@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cpu/cpu.hpp"
+#include "memory/pcid_manager.hpp"
 #include "task/scheduler.hpp"
 
 namespace kernel::cpu {
@@ -12,6 +13,7 @@ struct alignas(CACHE_LINE_SIZE) PerCPUData {
     task::Scheduler sched;
     task::Thread* curr_thread;
     task::Thread* idle_thread;
+    memory::PcidManager* pcid_manager;
 
     arch::CPUData arch;
 };

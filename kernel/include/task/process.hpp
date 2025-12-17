@@ -32,9 +32,11 @@ struct Process {
     std::atomic<size_t> next_tid;
     SpinLock lock;
 
+    uint16_t* pcid_cache;
+
     Process(memory::PageMap* map);
     Process();
-    ~Process() = default;
+    ~Process();
 
     static void init();
 };
