@@ -39,5 +39,6 @@ struct Scheduler {
     MinHeap<Thread*> sleeping_queue;
     uint32_t cpu_id;
     uint32_t active_queues_bitmap;
+    volatile size_t current_ticks = 0;
 };
 }  // namespace kernel::task

@@ -12,8 +12,6 @@ extern "C" void context_switch(kernel::task::Thread* prev, kernel::task::Thread*
 
 namespace kernel::task {
 namespace {
-volatile size_t total_ticks = 0;
-
 constexpr uint16_t TIME_SLICE_QUANTA[MLFQ_LEVELS] = {10, 20, 40, 80};
 }  // namespace
 
@@ -167,7 +165,7 @@ void Scheduler::schedule() {
 }
 
 cpu::IrqStatus Scheduler::tick() {
-    total_ticks++;
+    this->current_ticks++;
 
     {
         // Wake up Local Sleeper cells
@@ -175,7 +173,7 @@ cpu::IrqStatus Scheduler::tick() {
 
         while (!this->sleeping_queue.empty()) {
             Thread* t = this->sleeping_queue.top();
-            if (!t || t->wake_time_ticks > total_ticks) {
+            if (!t || t->wake_time_ticks > this->current_ticks) {
                 break;
             }
 
@@ -185,6 +183,7 @@ cpu::IrqStatus Scheduler::tick() {
             t->quantum      = TIME_SLICE_QUANTA[t->priority];
 
             this->ready_queue[t->priority].push_back(t);
+            this->active_queues_bitmap |= (1 << t->priority);
         }
     }
 
@@ -262,12 +261,14 @@ void Scheduler::boost_all() {
 }
 
 void Scheduler::sleep(size_t ms) {
+    bool int_status = arch::interrupt_status();
     arch::disable_interrupts();
+
     cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_cpu(this->cpu_id);
     Thread* curr         = cpu->curr_thread;
 
-    // Calculate wake time
-    curr->wake_time_ticks = total_ticks + ms;
+    // Set thread state and wakeup time
+    curr->wake_time_ticks = this->current_ticks + ms;
     curr->thread_state    = ThreadState::Sleeping;
 
     lock.lock();
@@ -275,6 +276,10 @@ void Scheduler::sleep(size_t ms) {
     lock.unlock();
 
     this->schedule();
+
+    if (int_status) {
+        arch::enable_interrupts();
+    }
 }
 
 void Scheduler::yield() {
