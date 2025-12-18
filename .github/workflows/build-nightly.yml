@@ -1,0 +1,50 @@
+name: Nightly Release
+
+on:
+    schedule:
+        - cron: "0 0 * * *"
+    workflow_dispatch:
+
+jobs:
+    nightly-release:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Build Podman Image
+              run: |
+                  podman build -t cpp-build-env -f Containerfile .
+
+            - name: Build Release Preset
+              run: |
+                  podman run --rm \
+                    -v ${{ github.workspace }}:/src \
+                    -w /src \
+                    cpp-build-env \
+                    bash -c "git config --global --add safe.directory /src && cmake -S . --preset x86_64-clang-release && cd build/x86_64-clang-release && make && make install_limine && make iso && make patch_limine"
+
+            - name: Package Artifact
+              run: |
+                  mkdir release_dist
+                  cp build/x86_64-clang-release/noise.iso release_dist/
+                  
+            - name: Update Nightly Release
+              uses: softprops/action-gh-release@v1
+              with:
+                  name: Nightly Build
+                  tag_name: nightly
+                  body: |
+                      This is an automated nightly build.
+                      Date: ${{ github.event.head_commit.timestamp || 'Today' }}
+                      Commit: ${{ github.sha }}
+                  files: |
+                      release_dist/*
+                  prerelease: true
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

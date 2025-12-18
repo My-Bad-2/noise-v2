@@ -3,7 +3,11 @@ function(add_qemu_targets)
     set(multiValueArgs COMMON_FLAGS ACCEL_FLAGS DEBUG_FLAGS)
     cmake_parse_arguments(ARG "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
-    find_program(QEMU_CMD "qemu-system-${${PROJECT_NAME}_ARCHITECTURE}" REQUIRED)
+    find_program(QEMU_CMD "qemu-system-${${PROJECT_NAME}_ARCHITECTURE}")
+
+    if(NOT QEMU_CMD)
+        return()
+    endif()
 
     add_custom_target(
         run
