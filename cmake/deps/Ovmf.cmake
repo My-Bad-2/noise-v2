@@ -6,8 +6,8 @@ set(EDK2_NIGHTLY_URL "https://raw.githubusercontent.com/retrage/edk2-nightly/64e
 
 # Select filename based on the repository's naming convention
 if(${${PROJECT_NAME}_ARCHITECTURE} STREQUAL "x86_64")
-    set(OVMF_FILENAME_CODE "DEBUGX64_OVMF_CODE.fd")
-    set(OVMF_FILENAME_VARS "DEBUGX64_OVMF_VARS.fd")
+    set(OVMF_FILENAME_CODE "RELEASEX64_OVMF_CODE.fd")
+    set(OVMF_FILENAME_VARS "RELEASEX64_OVMF_VARS.fd")
 else()
     message(FATAL_ERROR "No OVMF mapping for ${${PROJECT_NAME}_ARCHITECTURE}")
 endif()

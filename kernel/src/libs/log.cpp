@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "arch.hpp"
 #include "libs/log.hpp"
+#include "hal/smp_manager.hpp"
 
 namespace kernel {
 namespace __details {
@@ -78,6 +79,8 @@ void Logger::panic(const char* file, int line, const char* format, ...) {
     va_end(args);
 
     printf("%s\n", COLOR_RESET);
+
+    cpu::CpuCoreManager::stop_other_cores();
 
     // Final fatal path: halt the system with interrupts disabled.
     // All unrecoverable errors (e.g. bad memory map) funnel into this.

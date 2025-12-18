@@ -50,6 +50,11 @@ class CpuCoreManager {
     size_t get_total_cores() const;
     void send_ipi(uint32_t dest, uint8_t vector);
 
+    static void tlb_shootdown(uintptr_t virt_addr);
+    static void tlb_shootdown(uintptr_t start, size_t count);
+    static void call_on_core(uint32_t core_idx, void (*func)(void*), void* arg);
+    static void stop_other_cores();
+
     void allow_io_port(uint16_t port, bool enable) {
         PerCpuData* data = this->get_current_core();
         data->arch.gdt->set_io_perm(port, enable);
@@ -62,6 +67,9 @@ class CpuCoreManager {
    private:
     [[noreturn]] static void ap_entry_func(limine_mp_info* info);
     [[noreturn]] static void ap_main(PerCpuData* data);
+
+    static bool send_ipi_to_others(uint8_t vector);
+    static void wait_for_acks();
 
     Vector<PerCpuData*> cores;
     SpinLock lock;

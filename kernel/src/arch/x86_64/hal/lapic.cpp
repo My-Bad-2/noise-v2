@@ -381,7 +381,7 @@ void Lapic::send_ipi(uint32_t dest_id, uint8_t vector) {
         arch::Msr msr;
         msr.index = X2APIC_MSR_BASE + (LAPIC_ICR_LOW >> 4);
         msr.value = (static_cast<uint64_t>(dest_id) << 32) | vector | APIC_DELIVERY_FIXED |
-                    APIC_DELIVERY_ASSERT;
+                    APIC_DELIVERY_ASSERT | APIC_EDGE_TRIGGER;
         msr.write();
     } else {
         write(LAPIC_ICR_HIGH, dest_id << 24);
@@ -400,6 +400,32 @@ void Lapic::broadcast_ipi(uint8_t vector) {
         msr.write();
     } else {
         write(LAPIC_ICR_LOW, vector | 0xC0000 | APIC_DELIVERY_FIXED);
+    }
+}
+
+void Lapic::broadcast_ipi(uint8_t vector, bool self) {
+    while (read(LAPIC_ICR_LOW) & APIC_DELIVERY_STATUS) {
+        arch::pause();
+    }
+
+    uint32_t icr_val = vector;
+    icr_val |= APIC_DELIVERY_FIXED | APIC_DELIVERY_ASSERT | APIC_EDGE_TRIGGER;
+
+    if (self) {
+        icr_val |= ICR_DEST_ALL_INC_SELF;
+    } else {
+        icr_val |= ICR_DEST_ALL_EXC_SELF;
+    }
+
+    if (x2apic_active) {
+        // Destination: 0xFFFFFFFF (targets all CPUs)
+        // Mode: Logical
+        arch::Msr msr;
+        msr.index = X2APIC_MSR_BASE + (LAPIC_ICR_LOW >> 4);
+        msr.value = icr_val;
+        msr.write();
+    } else {
+        write(LAPIC_ICR_LOW, icr_val);
     }
 }
 

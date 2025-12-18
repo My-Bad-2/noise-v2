@@ -14,6 +14,7 @@ class Lapic {
     static void send_ipi(uint32_t dest_id, uint8_t vector);
     static void send_init_sipi(uint32_t dest_id, uint8_t page);
     static void broadcast_ipi(uint8_t vector);
+    static void broadcast_ipi(uint8_t vector, bool self);
 
     static void configure_timer(uint8_t vector, TimerMode mode);
     static void start_timer(uint32_t count);

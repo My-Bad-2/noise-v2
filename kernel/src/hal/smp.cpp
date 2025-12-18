@@ -1,3 +1,5 @@
+#include <atomic>
+#include "arch.hpp"
 #include "boot/boot.h"
 #include "hal/smp_manager.hpp"
 #include "libs/log.hpp"
@@ -58,6 +60,10 @@ void CpuCoreManager::init() {
         } else {
             // Launch the AP...
             info->goto_address = this->ap_entry_func;
+        }
+
+        while (!core->is_online.load(std::memory_order_acquire)) {
+            kernel::arch::pause();
         }
     }
 }
