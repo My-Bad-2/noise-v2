@@ -1,5 +1,5 @@
 #include <cstdint>
-#include "hal/cpu.hpp"
+#include "hal/smp_manager.hpp"
 #include "hal/timer.hpp"
 #include "libs/log.hpp"
 #include "memory/pcid_manager.hpp"
@@ -24,7 +24,7 @@ void Scheduler::add_thread(Thread* t) {
     }
 
     t->thread_state = Ready;
-    t->cpu          = cpu::CPUCoreManager::get_cpu(this->cpu_id);
+    t->cpu          = cpu::CpuCoreManager::get().get_core_by_index(this->cpu_id);
 
     this->ready_queue[t->priority].push_back(t);
     this->active_queues_bitmap |= (1 << t->priority);
@@ -51,21 +51,22 @@ Thread* Scheduler::get_next_thread() {
     }
 
     // Give up -> Idle
-    return cpu::CPUCoreManager::get_cpu(this->cpu_id)->idle_thread;
+    return cpu::CpuCoreManager::get().get_core_by_index(this->cpu_id)->idle_thread;
 }
 
 Thread* Scheduler::try_steal() {
     // Iterate over all other CPUs
-    uint32_t max_cpus = cpu::CPUCoreManager::get_core_count();
+    size_t max_cpus = cpu::CpuCoreManager::get().get_total_cores();
 
-    for (uint32_t i = 0; i < max_cpus; ++i) {
+    for (size_t i = 0; i < max_cpus; ++i) {
         if (i == this->cpu_id) {
             // Don't steal from your own house
             continue;
         }
 
-        cpu::PerCPUData* victim_cpu = cpu::CPUCoreManager::get_cpu(i);
-        Scheduler& victim_sched     = victim_cpu->sched;
+        cpu::PerCpuData* victim_cpu =
+            cpu::CpuCoreManager::get().get_core_by_index(static_cast<uint32_t>(i));
+        Scheduler& victim_sched = victim_cpu->sched;
 
         // Use `try_lock()` to avoid deadlock
         // If core A tries to steal from B, and B from A, locking hangs the kernel.
@@ -94,7 +95,7 @@ Thread* Scheduler::try_steal() {
 
             if (stolen) {
                 // Migrate the thread to this cpu
-                stolen->cpu = cpu::CPUCoreManager::get_cpu(this->cpu_id);
+                stolen->cpu = cpu::CpuCoreManager::get().get_core_by_index(this->cpu_id);
                 return stolen;
             }
         }
@@ -119,7 +120,7 @@ void Scheduler::schedule() {
     bool int_enabled = arch::interrupt_status();
     arch::disable_interrupts();
 
-    cpu::PerCPUData* cpu              = cpu::CPUCoreManager::get_cpu(this->cpu_id);
+    cpu::PerCpuData* cpu              = cpu::CpuCoreManager::get().get_core_by_index(this->cpu_id);
     memory::PcidManager* pcid_manager = cpu->pcid_manager;
     Thread* prev                      = cpu->curr_thread;
 
@@ -141,7 +142,7 @@ void Scheduler::schedule() {
     Process* next_proc = next->owner;
 
     uint16_t pcid    = pcid_manager->get_pcid(next_proc);
-    bool needs_flush = (next_proc->pcid_cache[cpu->cpu_id] == static_cast<uint16_t>(-1));
+    bool needs_flush = (next_proc->pcid_cache[cpu->core_idx] == static_cast<uint16_t>(-1));
 
     // Switch bookkeeping to the next thread before jumping into assembly.
     cpu->curr_thread   = next;
@@ -182,7 +183,7 @@ cpu::IrqStatus Scheduler::tick() {
         }
     }
 
-    cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_cpu(this->cpu_id);
+    cpu::PerCpuData* cpu = cpu::CpuCoreManager::get().get_core_by_index(this->cpu_id);
     Thread* curr         = cpu->curr_thread;
 
     if (curr == cpu->idle_thread) {
@@ -248,8 +249,8 @@ void Scheduler::boost_all() {
     }
 
     // Boost current thread too
-    Thread* curr = cpu::CPUCoreManager::get_cpu(this->cpu_id)->curr_thread;
-    if (curr && curr != cpu::CPUCoreManager::get_cpu(this->cpu_id)->idle_thread) {
+    Thread* curr = cpu::CpuCoreManager::get().get_core_by_index(this->cpu_id)->curr_thread;
+    if (curr && curr != cpu::CpuCoreManager::get().get_core_by_index(this->cpu_id)->idle_thread) {
         curr->priority = 0;
         curr->quantum  = TIME_SLICE_QUANTA[0];
     }
@@ -259,7 +260,7 @@ void Scheduler::sleep(size_t ms) {
     bool int_status = arch::interrupt_status();
     arch::disable_interrupts();
 
-    cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_cpu(this->cpu_id);
+    cpu::PerCpuData* cpu = cpu::CpuCoreManager::get().get_core_by_index(this->cpu_id);
     Thread* curr         = cpu->curr_thread;
 
     // Set thread state and wakeup time
@@ -279,7 +280,7 @@ void Scheduler::sleep(size_t ms) {
 
 void Scheduler::yield() {
     // Voluntary yield from the current thread back into the scheduler.
-    cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_cpu(this->cpu_id);
+    cpu::PerCpuData* cpu = cpu::CpuCoreManager::get().get_core_by_index(this->cpu_id);
     Thread* curr         = cpu->curr_thread;
 
     curr->thread_state = Ready;
@@ -296,7 +297,7 @@ void Scheduler::block() {
     // Block the current thread and reschedule.
     arch::disable_interrupts();
 
-    cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_cpu(this->cpu_id);
+    cpu::PerCpuData* cpu = cpu::CpuCoreManager::get().get_core_by_index(this->cpu_id);
     Thread* curr         = cpu->curr_thread;
 
     curr->thread_state = ThreadState::Blocked;
@@ -319,7 +320,7 @@ void Scheduler::block() {
 
 void Scheduler::unblock(Thread* t) {
     // Target acquired
-    cpu::PerCPUData* target_cpu = t->cpu;
+    cpu::PerCpuData* target_cpu = t->cpu;
     Scheduler& target_sched     = target_cpu->sched;
 
     {
@@ -336,14 +337,14 @@ void Scheduler::unblock(Thread* t) {
     }
 
     // If thread is on a different CPU, we might need to wake it up immediately
-    if (target_cpu->cpu_id != this->cpu_id) {
+    if (target_cpu->core_idx != this->cpu_id) {
         // Only send IPI if the new thread is important.
         int current_prio = target_cpu->curr_thread->priority;
 
         bool is_idle = (target_cpu->curr_thread == target_cpu->idle_thread);
 
         if (is_idle || (t->priority < current_prio)) {
-            cpu::CPUCoreManager::send_ipi(target_cpu->cpu_id, IPI_RESCHEDULE_VECTOR);
+            cpu::CpuCoreManager::get().send_ipi(target_cpu->apic_id, IPI_RESCHEDULE_VECTOR);
         }
     }
 }
@@ -352,7 +353,7 @@ void Scheduler::terminate() {
     // Terminate the current thread and switch to the next runnable one.
     arch::disable_interrupts();
 
-    cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_cpu(this->cpu_id);
+    cpu::PerCpuData* cpu = cpu::CpuCoreManager::get().get_core_by_index(this->cpu_id);
     Thread* curr         = cpu->curr_thread;
 
     curr->thread_state = Zombie;
@@ -370,7 +371,7 @@ void Scheduler::terminate() {
 }
 
 Scheduler& Scheduler::get() {
-    return cpu::CPUCoreManager::get_curr_cpu()->sched;
+    return cpu::CpuCoreManager::get().get_current_core()->sched;
 }
 
 void Scheduler::init(uint32_t id) {

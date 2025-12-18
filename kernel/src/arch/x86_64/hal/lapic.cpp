@@ -4,7 +4,6 @@
 #include "cpu/registers.hpp"
 #include "internal/lapic.h"
 #include "memory/memory.hpp"
-#include "libs/log.hpp"
 #include "hal/pit.hpp"
 #include "hal/hpet.hpp"
 #include <cpuid.h>
@@ -76,7 +75,7 @@ void Lapic::init() {
 
     if (x2apic_active) {
         msr.value |= (APIC_ENABLE_BIT | X2APIC_ENABLE_BIT);
-        LOG_INFO("LAPIC: enabling x2APIC mode");
+        // LOG_INFO("LAPIC: enabling x2APIC mode");
     } else {
         msr.value |= APIC_ENABLE_BIT;
         msr.value &= ~X2APIC_ENABLE_BIT;
@@ -86,7 +85,7 @@ void Lapic::init() {
         if (!lapic_base.ptr()) {
             // Map the LAPIC MMIO window once; all xAPIC accesses go through it.
             lapic_base = MMIORegion(phys_base, memory::PAGE_SIZE_4K);
-            LOG_INFO("LAPIC: using xAPIC MMIO base=0x%lx", phys_base);
+            // LOG_INFO("LAPIC: using xAPIC MMIO base=0x%lx", phys_base);
         }
     }
 
@@ -102,8 +101,8 @@ void Lapic::init() {
     write(LAPIC_EOI, 0);
     write(LAPIC_TPR, 0);
 
-    LOG_INFO("LAPIC: initialized (x2apic=%d, tsc-deadline=%d)", x2apic_active,
-             tsc_deadline_supported);
+    // LOG_INFO("LAPIC: initialized (x2apic=%d, tsc-deadline=%d)", x2apic_active,
+    //  tsc_deadline_supported);
 }
 
 void Lapic::configure_timer(uint8_t vector, TimerMode mode) {
@@ -167,12 +166,12 @@ void Lapic::calibrate_with_pit() {
     perform_calibration_race(pit_wait_10ms);
 
     PIT::disable();
-    LOG_INFO("LAPIC: calibrated using PIT as 10ms reference");
+    // LOG_INFO("LAPIC: calibrated using PIT as 10ms reference");
 }
 
 void Lapic::calibrate_with_hpet() {
     perform_calibration_race(hpet_wait_10ms);
-    LOG_INFO("LAPIC: calibrated using HPET as 10ms reference");
+    // LOG_INFO("LAPIC: calibrated using HPET as 10ms reference");
 }
 
 void Lapic::perform_calibration_race(void (*callback)()) {
@@ -248,9 +247,9 @@ void Lapic::calibrate() {
 
         if (ticks_per_us > 0) {
             is_calibrated = true;
-            LOG_INFO(
-                "LAPIC: calibrated from CPUID (ticks_per_ms=%u ticks_per_us=%u tsc_per_ms=%lu)",
-                ticks_per_ms, ticks_per_us, tsc_per_ms);
+            // LOG_INFO(
+            // "LAPIC: calibrated from CPUID (ticks_per_ms=%u ticks_per_us=%u tsc_per_ms=%lu)",
+            // ticks_per_ms, ticks_per_us, tsc_per_ms);
             return;
         }
     }
@@ -263,8 +262,8 @@ void Lapic::calibrate() {
         calibrate_with_pit();
     }
 
-    LOG_INFO("LAPIC: calibrated ticks_per_ms=%u ticks_per_us=%u tsc_per_ms=%lu", ticks_per_ms,
-             ticks_per_us, tsc_per_ms);
+    // LOG_INFO("LAPIC: calibrated ticks_per_ms=%u ticks_per_us=%u tsc_per_ms=%lu", ticks_per_ms,
+    //  ticks_per_us, tsc_per_ms);
 }
 
 void Lapic::udelay(uint32_t us) {

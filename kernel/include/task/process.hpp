@@ -6,7 +6,7 @@
 #include "libs/spinlock.hpp"
 
 namespace kernel::cpu {
-struct PerCPUData;
+struct PerCpuData;
 }
 
 namespace kernel::task {
@@ -45,7 +45,7 @@ struct Thread {
     size_t tid;
     uintptr_t kernel_stack_ptr;
 
-    cpu::PerCPUData* cpu;
+    cpu::PerCpuData* cpu;
     std::byte* kernel_stack;
     Process* owner;
 
@@ -56,7 +56,7 @@ struct Thread {
     size_t wake_time_ticks;
 
     Thread() = default;
-    Thread(Process* parent, void (*callback)(void*), void* args);
+    Thread(Process* parent, void (*callback)(void*), void* args, void* curr_cpu = nullptr);
     ~Thread() {}
 
    private:

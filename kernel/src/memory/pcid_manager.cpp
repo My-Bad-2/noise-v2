@@ -1,5 +1,5 @@
 #include "memory/pcid_manager.hpp"
-#include "hal/cpu.hpp"
+#include "hal/smp_manager.hpp"
 #include "libs/log.hpp"
 #include "task/process.hpp"
 
@@ -12,7 +12,7 @@ void PcidManager::init() {
 }
 
 uint16_t PcidManager::get_pcid(task::Process* proc) {
-    size_t cpu_id  = cpu::CPUCoreManager::get_curr_cpu_id();
+    size_t cpu_id   = cpu::CpuCoreManager::get().get_current_core()->core_idx;
     uint16_t cached = proc->pcid_cache[cpu_id];
 
     // If the process thinks it has a PCID, verify it
@@ -94,10 +94,10 @@ void PcidManager::claim_slot(uint16_t pcid, task::Process* proc, size_t cpu_id) 
 }
 
 PcidManager& PcidManager::get() {
-    if(!cpu::CPUCoreManager::initialized()) {
+    if (!cpu::CpuCoreManager::get().initialized()) {
         PANIC("PCID Manager called before SMP initialization.");
     }
 
-    return *cpu::CPUCoreManager::get_curr_cpu()->pcid_manager;
+    return *cpu::CpuCoreManager::get().get_current_core()->pcid_manager;
 }
 }  // namespace kernel::memory

@@ -39,7 +39,7 @@ void SIMD::init() {
     using namespace kernel::arch;
 
     if (check_feature(FEATURE_SSE)) {
-        LOG_DEBUG("SIMD: SSE feature detected, configuring CR0/CR4 and MXCSR");
+        // LOG_DEBUG("SIMD: SSE feature detected, configuring CR0/CR4 and MXCSR");
         Cr0 cr0                 = Cr0::read();
         cr0.emulation           = false;
         cr0.monitor_coprocessor = true;
@@ -65,13 +65,13 @@ void SIMD::init() {
         mode      = SSE;
         save_size = 512;
 
-        LOG_DEBUG("SIMD: SSE mode enabled, save_size=%u", save_size);
+        // LOG_DEBUG("SIMD: SSE mode enabled, save_size=%u", save_size);
     } else {
-        LOG_DEBUG("SIMD: SSE not available");
+        // LOG_DEBUG("SIMD: SSE not available");
     }
 
     if (check_feature(FEATURE_XSAVE) && check_feature(FEATURE_AVX)) {
-        LOG_DEBUG("SIMD: XSAVE and AVX features detected, enabling OSXSAVE");
+        // LOG_DEBUG("SIMD: XSAVE and AVX features detected, enabling OSXSAVE");
         Cr4 cr4     = Cr4::read();
         cr4.osxsave = true;
         cr4.write();
@@ -84,7 +84,7 @@ void SIMD::init() {
 
         bool avx512 = check_feature(FEATURE_AVX512F);
         if (avx512) {
-            LOG_DEBUG("SIMD: AVX512F detected, enabling AVX-512 state in XCR0");
+            // LOG_DEBUG("SIMD: AVX512F detected, enabling AVX-512 state in XCR0");
             xcr0.opmask    = true;
             xcr0.zmm_hi256 = true;
             xcr0.hi16_zmm  = true;
@@ -96,22 +96,23 @@ void SIMD::init() {
         bool has_xsaveopt = check_feature(FEATURE_XSAVEOPT);
         if (has_xsaveopt) {
             mode = AVXOpt;
-            LOG_DEBUG("SIMD: XSAVEOPT supported, selecting AVXOpt mode");
+            // LOG_DEBUG("SIMD: XSAVEOPT supported, selecting AVXOpt mode");
         } else {
-            LOG_DEBUG("SIMD: XSAVEOPT not supported, using AVX mode");
+            // LOG_DEBUG("SIMD: XSAVEOPT not supported, using AVX mode");
         }
 
         save_size = get_cpuid_value(FEATURE_FPU_SAVE_SIZE);
-        LOG_DEBUG("SIMD: final mode=%d, save_size=%u", static_cast<int>(mode), save_size);
+        // LOG_DEBUG("SIMD: final mode=%d, save_size=%u", static_cast<int>(mode), save_size);
     } else {
-        LOG_DEBUG("SIMD: XSAVE/AVX not available, keeping current mode=%d", static_cast<int>(mode));
+        // LOG_DEBUG("SIMD: XSAVE/AVX not available, keeping current mode=%d",
+        // static_cast<int>(mode));
     }
 
-    LOG_DEBUG("SIMD: end, mode=%d, save_size=%u", static_cast<int>(mode), save_size);
+    // LOG_DEBUG("SIMD: end, mode=%d, save_size=%u", static_cast<int>(mode), save_size);
 }
 
 void SIMD::save(void* buffer) {
-    LOG_DEBUG("SIMD: mode=%d, buffer=%p", static_cast<int>(mode), buffer);
+    // LOG_DEBUG("SIMD: mode=%d, buffer=%p", static_cast<int>(mode), buffer);
     switch (mode) {
         case AVXOpt:
             xsaveopt(buffer);
@@ -125,13 +126,13 @@ void SIMD::save(void* buffer) {
         case LegacyX87:
         case None:
         default:
-            LOG_DEBUG("SIMD: no SIMD state saved for mode=%d", static_cast<int>(mode));
+            // LOG_DEBUG("SIMD: no SIMD state saved for mode=%d", static_cast<int>(mode));
             break;
     }
 }
 
 void SIMD::restore(void* buffer) {
-    LOG_DEBUG("SIMD: mode=%d, buffer=%p", static_cast<int>(mode), buffer);
+    // LOG_DEBUG("SIMD: mode=%d, buffer=%p", static_cast<int>(mode), buffer);
     switch (mode) {
         case AVXOpt:
         case AVX:
@@ -143,7 +144,7 @@ void SIMD::restore(void* buffer) {
         case LegacyX87:
         case None:
         default:
-            LOG_DEBUG("SIMD: no SIMD state restored for mode=%d", static_cast<int>(mode));
+            // LOG_DEBUG("SIMD: no SIMD state restored for mode=%d", static_cast<int>(mode));
             break;
     }
 }

@@ -88,6 +88,7 @@ set(
 	${PROJECT_NAME}_CX_DEFINES
 	"-DLIMINE_API_REVISION=${${PROJECT_NAME}_LIMINE_API_REV}"
 	"-DKSTACK_SIZE=0x4000"
+	"-DCACHE_LINE_SIZE=64"
 )
 
 if(CMAKE_BUILD_TYPE MATCHES "^(Debug|ReleaseDbg)$")
@@ -157,7 +158,8 @@ set(
 	-no-shutdown
 	-serial stdio
 	-rtc base=localtime
-	-boot order=d,menu=on,splash-time=0
+	-boot order=d,menu=on,splash-time=0	
+	-smp 2
 )
 
 if(${PROJECT_NAME}_ARCHITECTURE STREQUAL "x86_64")

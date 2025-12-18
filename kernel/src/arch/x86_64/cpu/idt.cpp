@@ -59,6 +59,6 @@ void IDTManager::setup_idt() {
 
 void IDTManager::load_table() {
     asm volatile("lidt %0" ::"m"(idtr));
-    LOG_INFO("IDT: loaded table base=0x%lx limit=0x%x", idtr.base, idtr.limit);
+    // LOG_INFO("IDT: loaded table base=0x%lx limit=0x%x", idtr.base, idtr.limit);
 }
 }  // namespace kernel::cpu::arch

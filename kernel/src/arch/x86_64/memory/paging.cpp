@@ -1,3 +1,4 @@
+#include "hal/smp_manager.hpp"
 #include "memory/pagemap.hpp"
 #include "memory/memory.hpp"
 #include "memory/paging.hpp"
@@ -8,7 +9,6 @@
 #include "cpu/features.hpp"
 #include "libs/log.hpp"
 #include "libs/math.hpp"
-#include "hal/cpu.hpp"
 
 // PAT Memory Types
 #define PAT_TYPE_UC  0x00ULL  // Uncacheable
@@ -181,7 +181,7 @@ void TLB::flush_specific(uintptr_t virt_addr, uint16_t pcid) {
         desc.rsvd              = 0;
         desc.flush(arch::InvpcidType::IndivdualAddress);
     } else {
-        if (!cpu::CPUCoreManager::initialized()) {
+        if (!cpu::CpuCoreManager::get().initialized()) {
             // We're setting up kernel pagemap; return for now
             // since we will flush the TLB anyway
             return;
@@ -191,7 +191,7 @@ void TLB::flush_specific(uintptr_t virt_addr, uint16_t pcid) {
         // Since we cannot just flush this address for the inactive PCID.
         // so we invalidate the PCID entirely. The next time this process
         // runs, it will be forced to flush everything.
-        cpu::PerCPUData* cpu     = cpu::CPUCoreManager::get_curr_cpu();
+        cpu::PerCpuData* cpu     = cpu::CpuCoreManager::get().get_current_core();
         memory::PcidManager* mgr = cpu->pcid_manager;
         mgr->force_invalidate(pcid);
     }
@@ -211,7 +211,7 @@ void TLB::flush_context(uint16_t pcid) {
             // Flush the current context.
             cr3.write();
         } else {
-            if (!cpu::CPUCoreManager::initialized()) {
+            if (!cpu::CpuCoreManager::get().initialized()) {
                 // We're setting up kernel pagemap; return for now
                 // since we will flush the TLB anyway
                 return;
@@ -221,7 +221,7 @@ void TLB::flush_context(uint16_t pcid) {
             // Since we cannot just flush this address for the inactive PCID.
             // so we invalidate the PCID entirely. The next time this process
             // runs, it will be forced to flush everything.
-            cpu::PerCPUData* cpu     = cpu::CPUCoreManager::get_curr_cpu();
+            cpu::PerCpuData* cpu     = cpu::CpuCoreManager::get().get_current_core();
             memory::PcidManager* mgr = cpu->pcid_manager;
             mgr->force_invalidate(pcid);
         }

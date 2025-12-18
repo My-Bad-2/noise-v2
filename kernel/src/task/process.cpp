@@ -1,5 +1,5 @@
 #include "task/process.hpp"
-#include "hal/cpu.hpp"
+#include "hal/smp_manager.hpp"
 #include "libs/log.hpp"
 #include "libs/spinlock.hpp"
 #include "memory/pagemap.hpp"
@@ -13,7 +13,7 @@ static size_t next_pid;
 
 Process* kernel_proc = nullptr;
 
-Thread::Thread(Process* proc, void (*callback)(void*), void* args) {
+Thread::Thread(Process* proc, void (*callback)(void*), void* args, void* ptr) {
     if (proc == nullptr) {
         PANIC("Task: Thread's parent process not present!");
     }
@@ -26,7 +26,11 @@ Thread::Thread(Process* proc, void (*callback)(void*), void* args) {
     this->tid = proc->next_tid++;
     proc->lock.unlock();
 
-    this->cpu = cpu::CPUCoreManager::get_curr_cpu();
+    if (!ptr) {
+        this->cpu = cpu::CpuCoreManager::get().get_current_core();
+    } else {
+        this->cpu = reinterpret_cast<cpu::PerCpuData*>(ptr);
+    }
 
     arch_init(reinterpret_cast<uintptr_t>(callback), reinterpret_cast<uintptr_t>(args));
     this->owner->threads.push_back(this);

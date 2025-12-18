@@ -4,8 +4,8 @@
 
 #define IOPB_SIZE 0x2000  // 64K I/O ports / 8 bits per byte
 
-namespace kernel::cpu::arch {
-struct CPUData;
+namespace kernel::cpu {
+struct PerCpuData;
 }
 
 namespace kernel::cpu::arch {
@@ -54,9 +54,16 @@ struct [[gnu::packed]] GDTR {
 
 class GDTManager {
    public:
-    static void setup_tss(CPUData* cpu, uint64_t stack_top);
-    static void setup_gdt(CPUData* cpu);
-    static void load_tables(CPUData* cpu);
-    static void set_io_perm(CPUData* arch, uint16_t port, bool enable);
+    void setup_gdt();
+    void setup_tss(uintptr_t stack_top);
+
+    void set_ist(int idx, uintptr_t addr);
+    void set_io_perm(uint16_t port, bool enable);
+
+    void load_tables();
+
+   private:
+    GDTEntry gdt[7];
+    TSSBlock tss_block;
 };
 }  // namespace kernel::cpu::arch

@@ -1,4 +1,4 @@
-#include "hal/cpu.hpp"
+#include "hal/smp_manager.hpp"
 #include "libs/log.hpp"
 #include "memory/memory.hpp"
 #include "memory/pagemap.hpp"
@@ -177,8 +177,8 @@ PageMap* PageMap::get_kernel_map() {
 }
 
 PageMap* VirtualManager::curr_map() {
-    if (cpu::CPUCoreManager::initialized()) {
-        cpu::PerCPUData* cpu = cpu::CPUCoreManager::get_curr_cpu();
+    if (cpu::CpuCoreManager::get().initialized()) {
+        cpu::PerCpuData* cpu = cpu::CpuCoreManager::get().get_current_core();
         task::Process* proc  = cpu->curr_thread->owner;
 
         return proc->map;

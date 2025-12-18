@@ -5,6 +5,7 @@
 #include "hal/pit.hpp"
 #include "hal/lapic.hpp"
 #include "hal/hpet.hpp"
+#include "hal/smp_manager.hpp"
 #include "libs/log.hpp"
 #include "task/scheduler.hpp"
 
@@ -24,7 +25,8 @@ void setup_lapic(uint32_t period_ms, cpu::IInterruptHandler* handler) {
 void setup_hpet(uint32_t period_ms, cpu::IInterruptHandler* handler) {
     const uint8_t hpet_gsi = 2;
 
-    cpu::arch::InterruptDispatcher::map_pci_irq(hpet_gsi, TIMER_VECTOR, handler, 0, true);
+    uint32_t dest_cpu = cpu::CpuCoreManager::get().get_current_core()->core_idx;
+    cpu::arch::InterruptDispatcher::map_pci_irq(hpet_gsi, TIMER_VECTOR, handler, dest_cpu, true);
 
     size_t hz = 1000 / static_cast<size_t>(period_ms);
 

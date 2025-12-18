@@ -1,6 +1,6 @@
 #include "memory/pcid_manager.hpp"
 #include <cstdint>
-#include "hal/cpu.hpp"
+#include "hal/smp_manager.hpp"
 #include "memory/paging.hpp"
 
 namespace kernel::memory {
@@ -17,7 +17,7 @@ void PcidManager::force_invalidate(uint16_t pcid) {
 
     if (owner) {
         // Tell the process it lost its badge
-        uint32_t cpu           = cpu::CPUCoreManager::get_curr_cpu_id();
+        uint32_t cpu           = cpu::CpuCoreManager::get().get_current_core()->core_idx;
         owner->pcid_cache[cpu] = static_cast<uint16_t>(-1);
 
         // Clear our record

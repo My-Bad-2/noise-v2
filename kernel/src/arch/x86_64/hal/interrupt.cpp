@@ -1,7 +1,7 @@
 #include "hal/interrupt.hpp"
 #include "cpu/exception.hpp"
-#include "hal/cpu.hpp"
 #include "hal/interface/interrupt.hpp"
+#include "hal/smp_manager.hpp"
 #include "libs/log.hpp"
 #include "hal/lapic.hpp"
 #include "hal/ioapic.hpp"
@@ -52,13 +52,13 @@ void InterruptDispatcher::register_handler(uint8_t vector, IInterruptHandler* ha
         set_eoi(vector);
     }
 
-    LOG_INFO("IDT: registered handler '%s' for vector %u", handler ? handler->name() : "<null>",
-             vector);
+    // LOG_INFO("IDT: registered handler '%s' for vector %u", handler ? handler->name() : "<null>",
+    //  vector);
 }
 
 void InterruptDispatcher::unregister_handler(uint8_t vector) {
-    LOG_INFO("IDT: unregistered handler '%s' for vector %u",
-             handlers[vector] ? handlers[vector]->name() : "<null>", vector);
+    // LOG_INFO("IDT: unregistered handler '%s' for vector %u",
+    //  handlers[vector] ? handlers[vector]->name() : "<null>", vector);
     handlers[vector] = nullptr;
 
     clear_eoi(vector);
@@ -74,7 +74,7 @@ void InterruptDispatcher::map_pci_irq(uint32_t gsi, uint8_t vector, IInterruptHa
     size_t flags = IOAPIC_TRIGGER_LEVEL | IOAPIC_POLARITY_LOW;
     hal::IOAPIC::route_gsi(gsi, vector, dest_cpu, flags | IOAPIC_DELIVERY_FIXED);
 
-    LOG_INFO("IDT: mapped PCI GSI %u -> vector %u CPU %u", gsi, vector, dest_cpu);
+    // LOG_INFO("IDT: mapped PCI GSI %u -> vector %u CPU %u", gsi, vector, dest_cpu);
 }
 
 void InterruptDispatcher::map_legacy_irq(uint8_t irq, uint8_t vector, IInterruptHandler* handler,
@@ -82,24 +82,24 @@ void InterruptDispatcher::map_legacy_irq(uint8_t irq, uint8_t vector, IInterrupt
     register_handler(vector, handler, eoi_first);
     hal::IOAPIC::route_legacy_irq(irq, vector, dest_cpu);
 
-    LOG_INFO("IDT: mapped legacy IRQ %u -> vector %u CPU %u", irq, vector, dest_cpu);
+    // LOG_INFO("IDT: mapped legacy IRQ %u -> vector %u CPU %u", irq, vector, dest_cpu);
 }
 
 void InterruptDispatcher::unmap_legacy_irq(uint8_t irq, uint8_t vector) {
     hal::IOAPIC::mask_legacy_irq(irq);
     unregister_handler(vector);
-    LOG_INFO("IDT: unmapped legacy IRQ %u from vector %u", irq, vector);
+    // LOG_INFO("IDT: unmapped legacy IRQ %u from vector %u", irq, vector);
 }
 
 void InterruptDispatcher::unmap_pci_irq(uint32_t gsi, uint8_t vector) {
     hal::IOAPIC::mask_gsi(gsi);
     unregister_handler(vector);
-    LOG_INFO("IDT: unmapped PCI GSI %u from vector %u", gsi, vector);
+    // LOG_INFO("IDT: unmapped PCI GSI %u from vector %u", gsi, vector);
 }
 
 void InterruptDispatcher::dispatch(TrapFrame* frame) {
     uint8_t vector       = static_cast<uint8_t>(frame->vector);
-    PerCPUData* cpu      = CPUCoreManager::get_curr_cpu();
+    PerCpuData* cpu      = CpuCoreManager::get().get_current_core();
     const bool eoi_first = get_eoi(vector);
     const bool eoi       = (vector >= PLATFORM_INTERRUPT_BASE);
 
@@ -118,16 +118,16 @@ void InterruptDispatcher::dispatch(TrapFrame* frame) {
         IrqStatus status = handlers[vector]->handle(frame);
 
         if (status == IrqStatus::Unhandled) {
-            PANIC("IDT: vector %u was unhandled on CPU %u", vector, cpu->cpu_id);
+            PANIC("IDT: vector %u was unhandled on CPU %u", vector, cpu->core_idx);
         }
 
         if (status == IrqStatus::Reschedule) {
-            LOG_DEBUG("IDT: vector %u requested reschedule on CPU %u", vector, cpu->cpu_id);
+            LOG_DEBUG("IDT: vector %u requested reschedule on CPU %u", vector, cpu->core_idx);
             task::Scheduler& sched = task::Scheduler::get();
             sched.schedule();
         }
     } else {
-        default_handler(frame, cpu->cpu_id);
+        default_handler(frame, cpu->core_idx);
     }
 
     // EOIs are only sent for external/IRQ vectors, not for CPU exceptions.

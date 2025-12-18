@@ -1,9 +1,8 @@
 #include "memory/pmm.hpp"
 #include "boot/boot.h"
-#include "cpu/cpu.hpp"
-#include "hal/cpu.hpp"
 #include "libs/log.hpp"
 #include "memory/memory.hpp"
+#include "hal/smp_manager.hpp"
 #include "libs/spinlock.hpp"
 #include "libs/math.hpp"
 #include <stdlib.h>
@@ -385,8 +384,8 @@ void* PhysicalManager::alloc(size_t count) {
 
         size_t core_id = 0;
 
-        if (cpu::CPUCoreManager::initialized()) {
-            core_id = cpu::CPUCoreManager::get_curr_cpu_id();
+        if (cpu::CpuCoreManager::get().initialized()) {
+            core_id = cpu::CpuCoreManager::get().get_current_core()->core_idx;
         }
 
         if (core_id < pmm_state.num_cpus) {
@@ -647,8 +646,8 @@ void PhysicalManager::free(void* ptr, size_t count) {
 
         size_t core_id = 0;
 
-        if (cpu::CPUCoreManager::initialized()) {
-            core_id = cpu::CPUCoreManager::get_curr_cpu_id();
+        if (cpu::CpuCoreManager::get().initialized()) {
+            core_id = cpu::CpuCoreManager::get().get_current_core()->core_idx;
         }
 
         if (core_id < pmm_state.num_cpus) {
