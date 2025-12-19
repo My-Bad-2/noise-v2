@@ -1,3 +1,4 @@
+#include "arch.hpp"
 #include "cpu/idt.hpp"
 #include "cpu/registers.hpp"
 #include "hal/interrupt.hpp"
@@ -6,7 +7,10 @@
 #include "cpu/regs.h"
 #include "cpu/simd.hpp"
 #include "boot/boot.h"
+#include "libs/log.hpp"
 #include "memory/paging.hpp"
+
+extern "C" void syscall_entry();
 
 namespace kernel::cpu {
 namespace {
@@ -146,6 +150,7 @@ void CpuCoreManager::ap_main(PerCpuData* data) {
     hal::Timer::init();
 
     data->is_online.store(true);
+    init_syscalls();
     kernel::arch::enable_interrupts();
 
     LOG_INFO("AP Core %u (APIC %u) is online!", data->core_idx, data->apic_id);
@@ -255,5 +260,40 @@ void CpuCoreManager::call_on_core(uint32_t core_idx, void (*func)(void*), void* 
 
 void CpuCoreManager::stop_other_cores() {
     hal::Lapic::broadcast_ipi(IPI_PANIC_VECTOR, false);
+}
+
+void CpuCoreManager::init_syscalls() {
+    using namespace kernel::arch;
+
+    // Enable System Call Extensions (SCR) in EFER
+    Msr msr   = Msr::read(MSR_EFER);
+    msr.index = MSR_EFER;
+    msr.value |= EFER_SCE;
+    msr.write();
+
+    // Set up STAR (Segment Selectors)
+    // [64:48] User Base = 0x10 (Data: 0x18, Code: 0x20)
+    // [47:32] Kernel Base = 0x08 (Kernel Code: 0x08)
+    // [31:00] Reserved
+
+    // User Base is 0x10 so that `sysret` can reach `0x18` and `0x20`
+    // by adding its fixed offsets.
+    // `sysret` calculates SS offset by base + 8
+    // `sysret` calculates CS offset by base + 16
+    msr.index = MSR_STAR;
+    msr.value = (0x10ul << 48) | (0x08ul << 32);
+    msr.write();
+
+    // Setup LSTAR (Target RIP for syscall)
+    msr.index = MSR_LSTAR;
+    msr.value = reinterpret_cast<uintptr_t>(syscall_entry);
+    msr.write();
+
+    // Set SFMASK (RFLAGS Mask)
+    msr.index = MSR_FMASK;
+    // Clear Interrupt flag, Direction Flag, Trap Flag, and Nested Task
+    // on syscall
+    msr.value = FLAGS_IF | FLAGS_DF | FLAGS_TF | FLAGS_NT;
+    msr.write();
 }
 }  // namespace kernel::cpu

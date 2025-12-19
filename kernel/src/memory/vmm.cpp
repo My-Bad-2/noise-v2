@@ -131,7 +131,7 @@ void VirtualManager::map_kernel() {
         if (phdr[i].p_type == PT_LOAD) {
             uintptr_t seg_virt_start = phdr[i].p_vaddr;
             size_t seg_memsz         = phdr[i].p_memsz;
-            uint8_t seg_flags        = convert_elf_flags(phdr[i].p_flags);
+            uint8_t seg_flags        = convert_elf_flags(phdr[i].p_flags) | Global;
 
             uintptr_t start_aligned = align_down(seg_virt_start, PAGE_SIZE_4K);
             uintptr_t end_aligned   = align_up(seg_virt_start + seg_memsz, PAGE_SIZE_4K);
@@ -142,7 +142,7 @@ void VirtualManager::map_kernel() {
             // LOG_DEBUG("VMM: mapping kernel segment v=0x%lx p=0x%lx size=0x%lx flags=0x%x",
             //   start_aligned, phys_start, size_aligned, seg_flags);
 
-            kernel_pagemap.map_range(start_aligned, phys_start, size_aligned, seg_flags | Global,
+            kernel_pagemap.map_range(start_aligned, phys_start, size_aligned, seg_flags,
                                      CacheType::WriteBack);
         }
     }

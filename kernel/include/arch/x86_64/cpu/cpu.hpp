@@ -2,10 +2,6 @@
 
 #include "cpu/gdt.hpp"
 
-namespace kernel::cpu {
-struct PerCPUData;
-}
-
 namespace kernel::cpu::arch {
 struct alignas(CACHE_LINE_SIZE) CpuData {
     GDTManager* gdt;

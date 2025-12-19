@@ -9,6 +9,7 @@
 
 #include "arch.hpp"
 #include "cpu/exception.hpp"
+#include "cpu/regs.h"
 #include "hal/interface/uart.hpp"
 #include "hal/interrupt.hpp"
 #include "hal/uart.hpp"
@@ -71,7 +72,7 @@ void enable_interrupts() {
 bool interrupt_status() {
     uint64_t rflags = 0;
     asm volatile("pushfq; pop %0" : "=r"(rflags));
-    return rflags & 0x200;
+    return rflags & FLAGS_IF;
 }
 }  // namespace kernel::arch
 

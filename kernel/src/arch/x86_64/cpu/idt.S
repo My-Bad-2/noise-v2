@@ -27,22 +27,6 @@ interrupt_common_stub:
     pushq %r14
     pushq %r15
 
-    # Speculative Execution Mitigation (Zero registers)
-    xorl %eax, %eax
-    xorl %ebx, %ebx
-    xorl %ecx, %ecx
-    xorl %edx, %edx
-    xorl %esi, %esi
-    xorl %edi, %edi
-    xorq %r8,  %r8
-    xorq %r9,  %r9
-    xorq %r10, %r10
-    xorq %r11, %r11
-    xorq %r12, %r12
-    xorq %r13, %r13
-    xorq %r14, %r14
-    xorq %r15, %r15
-
     movq %rsp, %rdi
 
     # We check the Code Segment (CS) saved on the stack to see if we came from User Mode.

@@ -4,7 +4,9 @@
 #include "hal/smp_manager.hpp"
 #include "libs/log.hpp"
 #include "memory/pcid_manager.hpp"
+#include "memory/vmm.hpp"
 #include "task/process.hpp"
+#include "libs/math.hpp"
 
 namespace kernel::cpu {
 namespace {
@@ -25,6 +27,10 @@ void PerCpuData::init(void* stack_top) {
     } else {
         this->kstack_top = reinterpret_cast<uintptr_t>(stack_top);
     }
+
+    void* ustack = memory::VirtualManager::allocate(1, memory::PageSize::Size4K, memory::Read | memory::Write | memory::User);
+    this->user_stack  = reinterpret_cast<uintptr_t>(user_stack) + USTACK_SIZE;
+    this->user_stack  = align_up(this->user_stack, 16u);
 
     this->pcid_manager->init();
     this->sched.init(this->core_idx);
@@ -66,6 +72,7 @@ void CpuCoreManager::init(void* bsp_stack_top) {
         if (core->is_bsp) {
             // Commit the CPU state immediately
             core->commit();
+            this->init_syscalls();
         } else {
             // Launch the AP...
             info->goto_address = this->ap_entry_func;

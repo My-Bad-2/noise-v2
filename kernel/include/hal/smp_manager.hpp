@@ -22,6 +22,7 @@ struct alignas(CACHE_LINE_SIZE) PerCpuData {
     std::atomic<bool> is_online;
 
     uintptr_t kstack_top;
+    uintptr_t user_stack;
 
     task::Thread* curr_thread;
     task::Thread* idle_thread;
@@ -65,6 +66,8 @@ class CpuCoreManager {
     }
 
    private:
+    static void init_syscalls();
+
     [[noreturn]] static void ap_entry_func(limine_mp_info* info);
     [[noreturn]] static void ap_main(PerCpuData* data);
 
