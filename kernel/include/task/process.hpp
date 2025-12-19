@@ -55,9 +55,13 @@ struct Thread {
 
     size_t wake_time_ticks;
 
+    std::byte* fpu_storage;
+
     Thread() = default;
     Thread(Process* parent, void (*callback)(void*), void* args, void* curr_cpu = nullptr);
     ~Thread() {}
+
+    void late_init();
 
    private:
     void arch_init(uintptr_t entry, uintptr_t arg);

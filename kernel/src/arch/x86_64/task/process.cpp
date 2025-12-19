@@ -3,6 +3,8 @@
 #include "libs/log.hpp"
 #include "task/scheduler.hpp"
 #include <string.h>
+#include <new>
+#include "cpu/simd.hpp"
 
 extern "C" void switch_trampoline();
 
@@ -10,6 +12,10 @@ namespace kernel::task {
 using namespace cpu::arch;
 
 namespace {
+size_t fpu_size;
+std::align_val_t fpu_alignment;
+std::byte* clean_fpu_storage;
+
 void thread_exit() {
     // Entry point when a thread's main function returns.
     LOG_DEBUG("Task: thread entry function returned; terminating");
@@ -56,9 +62,6 @@ void setup_kstack(Thread* thread, uintptr_t entry, uintptr_t arg) {
     frame->rip    = entry;
 
     context->return_address = reinterpret_cast<uintptr_t>(switch_trampoline);
-
-    LOG_DEBUG("Task: thread %lu initialized (kstack_top=%p, sp=%p)", thread->tid, stack_top,
-              switch_addr);
 }
 }  // namespace
 
@@ -66,7 +69,29 @@ void Thread::arch_init(uintptr_t entry, uintptr_t arg) {
     // Allocate the kernel stack and set up the initial context.
     this->kernel_stack = new std::byte[KSTACK_SIZE];
 
-    LOG_DEBUG("Task: allocated kernel stack at %p", this->kernel_stack);
+    if (fpu_size == 0) {
+        fpu_size = SIMD::get_save_size();
+
+        if (fpu_size > 512) {
+            // FPU State higher than SSE requires 64-byte alignment
+            fpu_alignment = std::align_val_t(64);
+        } else {
+            fpu_alignment = std::align_val_t(16);
+        }
+
+        clean_fpu_storage = new (fpu_alignment) std::byte[fpu_size];
+        SIMD::save(clean_fpu_storage);
+    }
+
+    if (!this->fpu_storage) {
+        this->fpu_storage = new (fpu_alignment) std::byte[fpu_size];
+    }
+
+    if (!this->fpu_storage) {
+        PANIC("Cannot Allocate FPU storage for Thread %lu", this->tid);
+    }
+
+    memset(this->fpu_storage, 0, fpu_size);
     setup_kstack(this, entry, arg);
 }
 }  // namespace kernel::task

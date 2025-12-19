@@ -8,7 +8,7 @@
 
 namespace kernel::task {
 namespace {
-static size_t next_pid;
+size_t next_pid;
 }  // namespace
 
 Process* kernel_proc = nullptr;

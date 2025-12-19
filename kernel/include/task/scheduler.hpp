@@ -6,7 +6,7 @@
 #include "libs/spinlock.hpp"
 #include "task/process.hpp"
 
-#define MLFQ_LEVELS             4
+#define MLFQ_LEVELS             32
 #define PRIORITY_BOOST_INTERVAL 1000
 
 namespace kernel::task {
@@ -30,6 +30,9 @@ struct Scheduler {
     static Scheduler& get();
 
    private:
+    void save_fpu(std::byte* fpu);
+    void restore_fpu(std::byte* fpu);
+
     Thread* get_next_thread();
     bool check_for_higher_priority(int curr_level);
     Thread* try_steal();

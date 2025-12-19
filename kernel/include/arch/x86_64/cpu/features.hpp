@@ -85,6 +85,8 @@
 #define FEATURE_INVLPGB             0x80000008, 1, 3
 #define FEATURE_XSAVEOPT            0xD, 1, 0, 0
 #define FEATURE_FPU_SAVE_SIZE       0xD, 0, 2
+#define FEATURE_XCR0_LOW            0xD, 0, 0
+#define FEATURE_XCR0_HIGH           0xD, 0, 3
 
 namespace kernel::arch {
 bool check_feature(unsigned int leaf, int reg_idx, int bit);

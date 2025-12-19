@@ -47,16 +47,16 @@ void GDTManager::setup_gdt() {
     encode_entry(2, 0, 0, GDT_ACCESS_PRESENT | GDT_ACCESS_SEGMENT | GDT_ACCESS_READWRITE,
                  GDT_FLAG_PAGE_GRAN);
 
-    // 3: User Code
+    // 3: User Data
     encode_entry(3, 0, 0,
+                 GDT_ACCESS_PRESENT | GDT_ACCESS_SEGMENT | GDT_ACCESS_READWRITE | GDT_ACCESS_RING3,
+                 GDT_FLAG_PAGE_GRAN);
+
+    // 4: User Code
+    encode_entry(4, 0, 0,
                  GDT_ACCESS_PRESENT | GDT_ACCESS_SEGMENT | GDT_ACCESS_READWRITE |
                      GDT_ACCESS_EXECUTABLE | GDT_ACCESS_RING3,
                  GDT_FLAG_LONG_MODE | GDT_FLAG_PAGE_GRAN);
-
-    // 4: User Data
-    encode_entry(4, 0, 0,
-                 GDT_ACCESS_PRESENT | GDT_ACCESS_SEGMENT | GDT_ACCESS_READWRITE | GDT_ACCESS_RING3,
-                 GDT_FLAG_PAGE_GRAN);
 
     uint64_t tss_base  = reinterpret_cast<uint64_t>(&this->tss_block);
     uint64_t tss_limit = sizeof(TSSBlock) - 1;

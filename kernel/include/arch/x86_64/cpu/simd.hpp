@@ -19,6 +19,10 @@ class SIMD {
     static void restore(void* buffer);
 
     static uint32_t get_save_size() {
+        if (save_size == 0) {
+            SIMD::init();
+        }
+
         return save_size;
     }
 

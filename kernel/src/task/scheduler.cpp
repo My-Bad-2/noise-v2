@@ -1,15 +1,18 @@
-#include <cstdint>
 #include "hal/smp_manager.hpp"
 #include "hal/timer.hpp"
 #include "libs/log.hpp"
 #include "memory/pcid_manager.hpp"
+#include "task/process.hpp"
 
 // Low-level context switch routine implemented in architecture-specific assembly.
 extern "C" void context_switch(kernel::task::Thread* prev, kernel::task::Thread* next);
 
 namespace kernel::task {
 namespace {
-constexpr uint16_t TIME_SLICE_QUANTA[MLFQ_LEVELS] = {10, 20, 40, 80};
+// Generated using `misc/scripts/gen_time_quanta.py`
+constexpr uint16_t TIME_SLICE_QUANTA[32] = {10,  12,  13,  15,  17,  20,  23,  27,  31,  35,  40,
+                                            47,  54,  62,  71,  81,  94,  108, 124, 142, 164, 188,
+                                            216, 249, 286, 329, 379, 435, 501, 576, 662, 761};
 }  // namespace
 
 void Scheduler::add_thread(Thread* t) {
@@ -148,12 +151,22 @@ void Scheduler::schedule() {
     cpu->curr_thread   = next;
     next->thread_state = Running;
 
+    if (prev && prev->thread_state != Zombie) {
+        this->save_fpu(prev->fpu_storage);
+    }
+
     if ((prev_proc != next_proc) && next_proc) {
         // Switch address space
         next_proc->map->load(pcid, needs_flush);
     }
 
     context_switch(prev, next);
+
+    // When execution returns here, we are running on the `next` thread's stack.
+    // However, inside this stack frame, the variable `prev` refers to
+    // the current running thread (because it was `prev` when it suspended itself).
+    // Therefore, we restore `prev` to load the state of the thread that just woke up.
+    this->restore_fpu(prev->fpu_storage);
 
     if (int_enabled) {
         arch::enable_interrupts();
