@@ -1,22 +1,11 @@
-#include <atomic>
-#include <cstdint>
-#include "arch.hpp"
-#include "boot/limine.h"
-#include "cpu/exception.hpp"
-#include "cpu/gdt.hpp"
 #include "cpu/idt.hpp"
 #include "cpu/registers.hpp"
-#include "hal/interface/interrupt.hpp"
 #include "hal/interrupt.hpp"
 #include "hal/lapic.hpp"
 #include "hal/smp_manager.hpp"
-#include "libs/log.hpp"
 #include "cpu/regs.h"
 #include "cpu/simd.hpp"
 #include "boot/boot.h"
-#include "libs/spinlock.hpp"
-#include "memory/memory.hpp"
-#include "memory/pagemap.hpp"
 #include "memory/paging.hpp"
 
 namespace kernel::cpu {

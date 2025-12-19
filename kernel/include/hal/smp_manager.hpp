@@ -31,7 +31,7 @@ struct alignas(CACHE_LINE_SIZE) PerCpuData {
     arch::CpuData arch;
 
     PerCpuData(uint32_t idx, limine_mp_info* info);
-    void init();
+    void init(void* bsp_stack_top = nullptr);
     void commit();
 
    private:
@@ -42,7 +42,7 @@ class CpuCoreManager {
    public:
     static CpuCoreManager& get();
 
-    void init();
+    void init(void* bsp_stack_top);
 
     PerCpuData* get_current_core();
     PerCpuData* get_core_by_index(uint32_t index);

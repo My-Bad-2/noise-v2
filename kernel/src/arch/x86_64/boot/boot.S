@@ -3,6 +3,7 @@
 
 .extern kmain
 .extern limine_base_revision
+.extern kernel_stack
 
 _start:
     // Disable interrupts
@@ -20,6 +21,10 @@ _start:
     movq limine_base_revision + 16(%rip), %rax
     testq %rax, %rax
     jnz .Llimine_unsupported // If limine_base_revision[2] != 0, revision is not supported.
+
+    leaq kernel_stack(%rip), %rsp // Load address of kernel stack
+    addq $KSTACK_SIZE, %rsp // Move pointer to top of stack
+    andq $-16, %rsp // SysV abi requires RSP to be 16-byte aligned before a call
 
     // Zero RBP to mark the end of stack frames for debuggers/unwinders.
     xorq %rbp, %rbp

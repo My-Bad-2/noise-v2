@@ -32,7 +32,7 @@ Thread::Thread(Process* proc, void (*callback)(void*), void* args, void* ptr) {
         this->cpu = reinterpret_cast<cpu::PerCpuData*>(ptr);
     }
 
-    arch_init(reinterpret_cast<uintptr_t>(callback), reinterpret_cast<uintptr_t>(args));
+    this->arch_init(reinterpret_cast<uintptr_t>(callback), reinterpret_cast<uintptr_t>(args));
     this->owner->threads.push_back(this);
 }
 

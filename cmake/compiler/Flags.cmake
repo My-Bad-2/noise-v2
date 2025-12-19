@@ -87,8 +87,6 @@ set(
 set(
 	${PROJECT_NAME}_CX_DEFINES
 	"-DLIMINE_API_REVISION=${${PROJECT_NAME}_LIMINE_API_REV}"
-	"-DKSTACK_SIZE=0x4000"
-	"-DCACHE_LINE_SIZE=64"
 )
 
 if(CMAKE_BUILD_TYPE MATCHES "^(Debug|ReleaseDbg)$")
@@ -119,6 +117,13 @@ if(${PROJECT_NAME}_ARCHITECTURE STREQUAL "x86_64")
         "-mno-x87"
         "-mcmodel=kernel"
 		"-mstack-alignment=8"
+	)
+
+	list(
+		APPEND
+		${PROJECT_NAME}_CX_DEFINES
+		"-DKSTACK_SIZE=0x2000"
+		"-DCACHE_LINE_SIZE=64"
 	)
 else()
 	message(FATAL_ERROR "Unsupported ${PROJECT_NAME} Architecture: '${${PROJECT_NAME}_ARCHITECTURE}'")

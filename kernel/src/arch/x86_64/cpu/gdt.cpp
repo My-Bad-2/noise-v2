@@ -78,7 +78,7 @@ void GDTManager::setup_tss(uintptr_t stack_top) {
 
     // Point IOMAP base to the array immediately following the header
     block.header.iomap_base = sizeof(TSS64);
-    block.header.rsp0       = stack_top;
+    block.header.rsp[0]     = stack_top;
 
     memset(block.iopb, 0xFF, IOPB_SIZE);
     block.terminator = 0xFF;

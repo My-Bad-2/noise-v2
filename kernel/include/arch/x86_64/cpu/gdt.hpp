@@ -31,9 +31,7 @@ struct [[gnu::packed]] TSSDescriptor {
 
 struct [[gnu::packed]] TSS64 {
     uint32_t reserved0;
-    uint64_t rsp0;
-    uint64_t rsp1;
-    uint64_t rsp2;
+    uint64_t rsp[3];
     uint64_t reserved1;
     uint64_t ist[7];
     uint64_t reserved2;
@@ -61,6 +59,11 @@ class GDTManager {
     void set_io_perm(uint16_t port, bool enable);
 
     void load_tables();
+
+    inline void set_rsp(int idx, uint64_t val) {
+        this->tss_block.header.rsp[idx] = val & 0xFFFFFFFF;
+        this->tss_block.header.rsp[idx] |= val >> 32;
+    }
 
    private:
     GDTEntry gdt[7];

@@ -50,14 +50,6 @@ volatile struct limine_paging_mode_request paging_mode_request = {
 };
 
 [[gnu::section(".requests")]]
-volatile struct limine_stack_size_request stack_size_request = {
-    .id         = LIMINE_STACK_SIZE_REQUEST_ID,
-    .revision   = 0,
-    .response   = nullptr,
-    .stack_size = KSTACK_SIZE,
-};
-
-[[gnu::section(".requests")]]
 volatile struct limine_rsdp_request rsdp_request = {
     .id       = LIMINE_RSDP_REQUEST_ID,
     .revision = 0,

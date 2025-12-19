@@ -13,14 +13,18 @@ void idle_worker(void*) {
 }
 }  // namespace
 
-void PerCpuData::init() {
-    std::byte* stack_base = new std::byte[KSTACK_SIZE];
+void PerCpuData::init(void* stack_top) {
+    if (!stack_top) {
+        std::byte* stack_base = new std::byte[KSTACK_SIZE];
 
-    if (!stack_base) {
-        PANIC("Cannot allocate stack for AP core idx %u", this->core_idx);
+        if (!stack_base) {
+            PANIC("Cannot allocate stack for AP core idx %u", this->core_idx);
+        }
+
+        this->kstack_top = reinterpret_cast<uintptr_t>(stack_base) + KSTACK_SIZE;
+    } else {
+        this->kstack_top = reinterpret_cast<uintptr_t>(stack_top);
     }
-
-    this->kstack_top = reinterpret_cast<uintptr_t>(stack_base) + KSTACK_SIZE;
 
     this->pcid_manager->init();
     this->sched.init(this->core_idx);
@@ -32,7 +36,7 @@ void PerCpuData::init() {
     this->arch_init();
 }
 
-void CpuCoreManager::init() {
+void CpuCoreManager::init(void* bsp_stack_top) {
     if (!mp_request.response) {
         PANIC("Limine SMP Response is missing!");
     }
@@ -51,7 +55,12 @@ void CpuCoreManager::init() {
         PerCpuData* core     = this->cores[i];
         limine_mp_info* info = mp_request.response->cpus[i];
 
-        core->init();
+        if (core->is_bsp) {
+            core->init(bsp_stack_top);
+        } else {
+            core->init();
+        }
+
         info->extra_argument = reinterpret_cast<uintptr_t>(core);
 
         if (core->is_bsp) {
