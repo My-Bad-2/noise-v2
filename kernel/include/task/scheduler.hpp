@@ -33,8 +33,10 @@ struct Scheduler {
     void save_fpu(std::byte* fpu);
     void restore_fpu(std::byte* fpu);
 
-    Thread* get_next_thread();
+    void scan_for_starvation();
     bool check_for_higher_priority(int curr_level);
+
+    Thread* get_next_thread();
     Thread* try_steal();
 
     SpinLock lock;

@@ -49,13 +49,15 @@ struct Thread {
     std::byte* kernel_stack;
     Process* owner;
 
-    ThreadState thread_state;
+    ThreadState state;
     uint16_t priority;
     uint16_t quantum;
 
     size_t wake_time_ticks;
 
     std::byte* fpu_storage;
+    size_t last_run_timestamp;
+    size_t wait_start_timestamp;
 
     Thread() = default;
     Thread(Process* parent, void (*callback)(void*), void* args, void* curr_cpu = nullptr);

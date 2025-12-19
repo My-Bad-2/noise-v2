@@ -1,3 +1,4 @@
+#include "task/scheduler.hpp"
 #include "hal/smp_manager.hpp"
 #include "hal/timer.hpp"
 #include "libs/log.hpp"
@@ -26,8 +27,8 @@ void Scheduler::add_thread(Thread* t) {
         t->quantum = TIME_SLICE_QUANTA[t->priority];
     }
 
-    t->thread_state = Ready;
-    t->cpu          = cpu::CpuCoreManager::get().get_core_by_index(this->cpu_id);
+    t->state = Ready;
+    t->cpu   = cpu::CpuCoreManager::get().get_core_by_index(this->cpu_id);
 
     this->ready_queue[t->priority].push_back(t);
     this->active_queues_bitmap |= (1 << t->priority);
@@ -129,11 +130,16 @@ void Scheduler::schedule() {
 
     // Select the next runnable thread under the scheduler lock.
     lock.lock();
+
+    if (this->current_ticks % 50 == 0) {
+        this->scan_for_starvation();
+    }
+
     Thread* next = this->get_next_thread();
     lock.unlock();
 
     // Nothing to do if we're going to continue running the same thread.
-    if ((prev == next) && (prev->thread_state != ThreadState::Zombie)) {
+    if ((prev == next) && (prev->state != ThreadState::Zombie)) {
         if (int_enabled) {
             arch::enable_interrupts();
         }
@@ -148,16 +154,20 @@ void Scheduler::schedule() {
     bool needs_flush = (next_proc->pcid_cache[cpu->core_idx] == static_cast<uint16_t>(-1));
 
     // Switch bookkeeping to the next thread before jumping into assembly.
-    cpu->curr_thread   = next;
-    next->thread_state = Running;
+    cpu->curr_thread = next;
+    next->state      = Running;
 
-    if (prev && prev->thread_state != Zombie) {
+    if (prev && prev->state != Zombie) {
         this->save_fpu(prev->fpu_storage);
     }
 
     if ((prev_proc != next_proc) && next_proc) {
         // Switch address space
         next_proc->map->load(pcid, needs_flush);
+    }
+
+    if (prev->state == Ready) {
+        prev->wait_start_timestamp = this->current_ticks;
     }
 
     context_switch(prev, next);
@@ -188,8 +198,8 @@ cpu::IrqStatus Scheduler::tick() {
 
             this->sleeping_queue.extract_min(t);
 
-            t->thread_state = Ready;
-            t->quantum      = TIME_SLICE_QUANTA[t->priority];
+            t->state   = Ready;
+            t->quantum = TIME_SLICE_QUANTA[t->priority];
 
             this->ready_queue[t->priority].push_back(t);
             this->active_queues_bitmap |= (1 << t->priority);
@@ -208,6 +218,13 @@ cpu::IrqStatus Scheduler::tick() {
         curr->quantum--;
     }
 
+    if (curr->state == Blocked) {
+        // Thread gave up CPU voluntarily (I/O). Boost it!
+        if (curr->priority > 0) {
+            curr->priority--;
+        }
+    }
+
     if (curr->quantum <= 0) {
         LockGuard guard(this->lock);
 
@@ -216,8 +233,8 @@ cpu::IrqStatus Scheduler::tick() {
             curr->priority++;
         }
 
-        curr->quantum      = TIME_SLICE_QUANTA[curr->priority];
-        curr->thread_state = Ready;
+        curr->quantum = TIME_SLICE_QUANTA[curr->priority];
+        curr->state   = Ready;
 
         this->ready_queue[curr->priority].push_back(curr);
         this->active_queues_bitmap |= (1u << curr->priority);
@@ -278,7 +295,7 @@ void Scheduler::sleep(size_t ms) {
 
     // Set thread state and wakeup time
     curr->wake_time_ticks = this->current_ticks + ms;
-    curr->thread_state    = ThreadState::Sleeping;
+    curr->state           = ThreadState::Sleeping;
 
     lock.lock();
     this->sleeping_queue.insert(curr);
@@ -296,7 +313,7 @@ void Scheduler::yield() {
     cpu::PerCpuData* cpu = cpu::CpuCoreManager::get().get_core_by_index(this->cpu_id);
     Thread* curr         = cpu->curr_thread;
 
-    curr->thread_state = Ready;
+    curr->state = Ready;
 
     lock.lock();
     this->active_queues_bitmap |= (1 << curr->priority);
@@ -313,7 +330,7 @@ void Scheduler::block() {
     cpu::PerCpuData* cpu = cpu::CpuCoreManager::get().get_core_by_index(this->cpu_id);
     Thread* curr         = cpu->curr_thread;
 
-    curr->thread_state = ThreadState::Blocked;
+    curr->state = ThreadState::Blocked;
 
     // Promote if blocked before using significant quantum
     const uint16_t curr_slice_max = TIME_SLICE_QUANTA[curr->priority];
@@ -339,7 +356,7 @@ void Scheduler::unblock(Thread* t) {
     {
         LockGuard guard(target_sched.lock);
 
-        t->thread_state = Ready;
+        t->state = Ready;
 
         if (t->quantum <= 0) {
             t->quantum = TIME_SLICE_QUANTA[t->priority];
@@ -369,18 +386,54 @@ void Scheduler::terminate() {
     cpu::PerCpuData* cpu = cpu::CpuCoreManager::get().get_core_by_index(this->cpu_id);
     Thread* curr         = cpu->curr_thread;
 
-    curr->thread_state = Zombie;
+    curr->state = Zombie;
 
     lock.lock();
     Thread* next = this->get_next_thread();
     lock.unlock();
 
-    cpu->curr_thread   = next;
-    next->thread_state = Running;
+    cpu->curr_thread = next;
+    next->state      = Running;
 
     context_switch(curr, next);
 
     PANIC("Zombie wants REVENGE!");
+}
+
+void Scheduler::scan_for_starvation() {
+    size_t now       = this->current_ticks;
+    size_t threshold = 500;
+
+    for (int prio = 1; prio < MLFQ_LEVELS; ++prio) {
+        auto& queue = this->ready_queue[prio];
+
+        auto it = queue.begin();
+        while (it != queue.end()) {
+            Thread* t = *it;
+
+            // Check how long it has been waiting since it entered the queue
+            if ((now - t->wait_start_timestamp) > threshold) {
+                uint16_t old_prio = t->priority;
+
+                // Remove it from the current low-priority queue
+                it = queue.erase(it);
+
+                // Boost to highest
+                t->priority             = 0;
+                t->wait_start_timestamp = now;
+
+                // Add to the high-priority queue
+                this->ready_queue[0].push_back(t);
+                this->active_queues_bitmap |= (1u << 0);
+
+                if (queue.empty()) {
+                    this->active_queues_bitmap &= ~(1u << old_prio);
+                }
+            } else {
+                ++it;
+            }
+        }
+    }
 }
 
 Scheduler& Scheduler::get() {

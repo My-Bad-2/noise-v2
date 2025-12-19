@@ -18,9 +18,12 @@ Thread::Thread(Process* proc, void (*callback)(void*), void* args, void* ptr) {
         PANIC("Task: Thread's parent process not present!");
     }
 
-    this->priority     = 0;
-    this->owner        = proc;
-    this->thread_state = Ready;
+    this->priority = 0;
+    this->owner    = proc;
+    this->state    = Ready;
+
+    this->last_run_timestamp   = 0;
+    this->wait_start_timestamp = 0;
 
     proc->lock.lock();
     this->tid = proc->next_tid++;
