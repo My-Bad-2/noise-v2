@@ -651,7 +651,7 @@ void PageMap::global_init() {
         arch::Msr efer = arch::Msr::read(MSR_EFER);
         efer.value |= EFER_NXE;
         efer.write();
-        LOG_INFO("Paging: NX enabled");
+        // LOG_INFO("Paging: NX enabled");
     }
 
     arch::Cr4 cr4 = arch::Cr4::read();
@@ -691,8 +691,8 @@ void PageMap::global_init() {
 
     init_pat();
 
-    LOG_INFO("Paging: initialized (levels=%d 1G=%d PCID=%d)", max_levels, support_1g_pages,
-             pcid_supported);
+    // LOG_INFO("Paging: initialized (levels=%d 1G=%d PCID=%d)", max_levels, support_1g_pages,
+            //  pcid_supported);
 }
 
 bool PageMap::is_active() const {

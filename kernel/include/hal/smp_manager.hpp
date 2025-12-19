@@ -22,7 +22,6 @@ struct alignas(CACHE_LINE_SIZE) PerCpuData {
     std::atomic<bool> is_online;
 
     uintptr_t kstack_top;
-    uintptr_t user_stack;
 
     task::Thread* curr_thread;
     task::Thread* idle_thread;

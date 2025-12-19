@@ -8,6 +8,7 @@
 #include "cpu/simd.hpp"
 #include "boot/boot.h"
 #include "libs/log.hpp"
+#include "memory/pagemap.hpp"
 #include "memory/paging.hpp"
 
 extern "C" void syscall_entry();
