@@ -8,7 +8,7 @@
 #define MLFQ_LEVELS               32
 #define PRIORITY_BOOST_INTERVAL   1000
 #define STARVATION_CHECK_INTERVAL 100
-#define DEATH_REAPER_INTERVAL     2000
+#define GRIM_REAPER_INTERVAL      2000
 
 namespace kernel::task {
 struct Scheduler {
@@ -46,11 +46,11 @@ struct Scheduler {
     volatile size_t current_ticks = 0;
 
     IntrusiveList<Thread, SchedulerTag>* ready_queue;
+    IntrusiveList<Thread, SchedulerTag> zombie_list;
     MinHeap<Thread*> sleeping_queue;
 
+    SpinLock zombie_lock;
     SpinLock lock;
-    static IntrusiveList<Thread, SchedulerTag> zombie_list;
-    static SpinLock zombie_lock;
 };
 
 void register_reschedule_handler();

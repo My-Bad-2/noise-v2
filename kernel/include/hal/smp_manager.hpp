@@ -26,6 +26,7 @@ struct alignas(CACHE_LINE_SIZE) PerCpuData {
 
     task::Thread* curr_thread;
     task::Thread* idle_thread;
+    task::Thread* reaper_thread;
     task::Scheduler sched;
     memory::PcidManager* pcid_manager;
 

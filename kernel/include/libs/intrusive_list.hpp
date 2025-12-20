@@ -246,6 +246,27 @@ class IntrusiveList {
         }
     }
 
+    [[gnu::always_inline]] inline void splice(Iterator pos, IntrusiveList& other) noexcept {
+        if (&other == this || other.empty()) {
+            return;
+        }
+
+        Node* first = other.root.next;
+        Node* last  = other.root.prev;
+
+        Node* at     = pos.node();
+        Node* before = at->prev;
+
+        before->next = first;
+        first->prev  = before;
+
+        last->next = at;
+        at->prev   = last;
+
+        other.root.next = &other.root;
+        other.root.prev = &other.root;
+    }
+
     friend class Iterator;
 
    private:

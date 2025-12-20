@@ -43,7 +43,21 @@ void PerCpuData::init(void* stack_top) {
 
     this->idle_thread = this->curr_thread =
         new task::Thread(task::Process::kernel_proc, idle_worker, nullptr, this);
+
+    this->reaper_thread = new task::Thread(
+        task::Process::kernel_proc,
+        [](void* arg) {
+            task::Scheduler* sched = reinterpret_cast<task::Scheduler*>(arg);
+
+            while (true) {
+                sched->block();
+                sched->reap_zombies();
+            }
+        },
+        &this->sched, this);
+
     this->sched.add_thread(this->idle_thread);
+    this->sched.add_thread(this->reaper_thread);
 
     this->arch_init();
 }

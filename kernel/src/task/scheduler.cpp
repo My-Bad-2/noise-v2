@@ -18,9 +18,6 @@ constexpr uint16_t TIME_SLICE_QUANTA[32] = {10,  12,  13,  15,  17,  20,  23,  2
                                             216, 249, 286, 329, 379, 435, 501, 576, 662, 761};
 }  // namespace
 
-IntrusiveList<Thread, SchedulerTag> Scheduler::zombie_list;
-SpinLock Scheduler::zombie_lock;
-
 void Scheduler::add_thread(Thread* t) {
     if (t->priority >= MLFQ_LEVELS) {
         t->priority = MLFQ_LEVELS - 1;
@@ -246,7 +243,16 @@ cpu::IrqStatus Scheduler::tick() {
     }
 
     cpu::PerCpuData* cpu = cpu::CpuCoreManager::get().get_core_by_index(this->cpu_id);
-    Thread* curr         = cpu->curr_thread;
+
+    // Wake up Thread Reaper (Maintenance)
+    // Run Periodically (Every 2000 ticks / ~2 seconds)
+    if ((this->current_ticks % GRIM_REAPER_INTERVAL == 0) && !this->zombie_list.empty()) {
+        if (cpu->reaper_thread && cpu->reaper_thread->state != Ready) {
+            this->unblock(cpu->reaper_thread);
+        }
+    }
+
+    Thread* curr = cpu->curr_thread;
 
     // If we are Idle and a work just arrived (via wake up above, schedule immediately).
     if (curr == cpu->idle_thread) {
@@ -570,19 +576,26 @@ void Scheduler::scan_for_starvation() {
 }
 
 void Scheduler::reap_zombies() {
-    LockGuard guard(zombie_lock);
+    IntrusiveList<Thread, SchedulerTag> death_row;
 
-    if (zombie_list.empty()) {
-        return;
+    {
+        LockGuard guard(this->zombie_lock);
+
+        if (this->zombie_list.empty()) {
+            return;
+        }
+
+        // Move everything from global list to local list
+        death_row.splice(death_row.end(), this->zombie_list);
     }
 
-    auto it = zombie_list.begin();
+    auto it = death_row.begin();
 
     if (it == nullptr) {
         return;
     }
 
-    while (it != zombie_list.end()) {
+    while (it != death_row.end()) {
         auto next_it = it;
         ++next_it;
 
@@ -590,28 +603,30 @@ void Scheduler::reap_zombies() {
 
         // Ensure the thread has been dead long enough for context switch
         // to have definitely finished on the original core.
-        // 2ms is enough for now.
-        if ((this->current_ticks - t->last_run_timestamp) <= 2) {
-            it = next_it;
-            continue;
+        // 1ms is enough for now.
+        if ((this->current_ticks - t->last_run_timestamp) <= 1) {
+            death_row.remove(*t);
+            this->zombie_lock.lock();
+            this->zombie_list.push_back(*t);
+            this->zombie_lock.unlock();
+        } else {
+            // Unlink from Process
+            if (Process* owner = t->owner) {
+                LockGuard proc_guard(owner->lock);
+                owner->threads.remove(*t);
+            }
+
+            // Free Thread resources
+            if (t->kernel_stack) {
+                delete[] t->kernel_stack;
+            }
+
+            if (t->fpu_storage) {
+                delete[] t->fpu_storage;
+            }
+
+            delete t;
         }
-
-        zombie_list.remove(*t);
-
-        if (Process* owner = t->owner) {
-            LockGuard proc_guard(owner->lock);
-            owner->threads.remove(*t);
-        }
-
-        if (t->kernel_stack) {
-            delete[] t->kernel_stack;
-        }
-
-        if (t->fpu_storage) {
-            delete[] t->fpu_storage;
-        }
-
-        delete t;
 
         it = next_it;
     }
@@ -638,14 +653,6 @@ void Scheduler::init(uint32_t id) {
             [](void*) {
                 Scheduler& sched = Scheduler::get();
                 sched.scan_for_starvation();
-            },
-            nullptr);
-
-        timer.schedule(
-            hal::TimerMode::Periodic, DEATH_REAPER_INTERVAL,
-            [](void*) {
-                Scheduler& sched = Scheduler::get();
-                sched.reap_zombies();
             },
             nullptr);
 
