@@ -151,11 +151,6 @@ void Scheduler::schedule() {
     // Select the next runnable thread under the scheduler lock.
     lock.lock();
 
-    // TODO: Switch to intrusive list and fix scan_for_starvation
-    // if (this->current_ticks % 50 == 0) {
-    //     this->scan_for_starvation();
-    // }
-
     // If prev is currently Running, it means it was preempted.
     // We must download it to Ready and add it back to the run queue.
     // If it is Blocked or Zombie, we leave it alone.
@@ -576,6 +571,14 @@ void Scheduler::init(uint32_t id) {
             [](void*) {
                 Scheduler& sched = Scheduler::get();
                 sched.boost_all();
+            },
+            nullptr);
+
+        timer.schedule(
+            hal::TimerMode::Periodic, STARVATION_CHECK_INTERVAL,
+            [](void*) {
+                Scheduler& sched = Scheduler::get();
+                sched.scan_for_starvation();
             },
             nullptr);
 

@@ -5,8 +5,9 @@
 #include "libs/spinlock.hpp"
 #include "task/process.hpp"
 
-#define MLFQ_LEVELS             32
-#define PRIORITY_BOOST_INTERVAL 1000
+#define MLFQ_LEVELS               32
+#define PRIORITY_BOOST_INTERVAL   1000
+#define STARVATION_CHECK_INTERVAL 100
 
 namespace kernel::task {
 struct Scheduler {

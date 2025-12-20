@@ -1,4 +1,5 @@
 #include "task/process.hpp"
+#include <atomic>
 #include "hal/smp_manager.hpp"
 #include "libs/log.hpp"
 #include "libs/spinlock.hpp"
@@ -9,11 +10,8 @@
 #include "memory/pcid_manager.hpp"
 
 namespace kernel::task {
-namespace {
-size_t next_pid;
-}  // namespace
-
-Process* kernel_proc = nullptr;
+Process* Process::kernel_proc         = nullptr;
+std::atomic<size_t> Process::next_pid = 0;
 
 Thread::Thread(Process* proc, void (*callback)(void*), void* args, void* ptr, bool is_user) {
     if (proc == nullptr) {
@@ -37,63 +35,63 @@ Thread::Thread(Process* proc, void (*callback)(void*), void* args, void* ptr, bo
     {
         LockGuard guard(proc->lock);
         this->tid = proc->next_tid++;
-        proc->threads.push_back(this);
+        proc->threads.push_back(*this);
     }
 
     this->arch_init(reinterpret_cast<uintptr_t>(callback), reinterpret_cast<uintptr_t>(args));
 }
 
 Process::Process(memory::PageMap* map) : map(map) {
-    static bool kernel_proc_init = false;
+    this->pid = next_pid.fetch_add(1, std::memory_order_relaxed);
+    this->next_tid.store(1, std::memory_order_relaxed);
 
-    if (kernel_proc_init) {
-        PANIC("Call Process::Process(memory::PageMap*) only once");
-    }
-
-    lock.lock();
-    this->pid = next_pid++;
-    lock.unlock();
-
-    // Start at 4KB to leave page 0 unmapped
     size_t user_start = 0x1000;
-    // End of Canonical Lower half
-    size_t user_end = 0x00007FFFFFFFF000;
-
+    size_t user_end   = 0x00007FFFFFFFF000;
     this->user_vmm.init(user_start, user_end - user_start);
 
-    // Array to store the PIC assigned to this process on each CPU.
-    this->pcid_cache = new uint16_t[mp_request.response->cpu_count];
+    // Array to store the PICD assigned to this process on each CPU.
+    size_t cpu_count = mp_request.response->cpu_count;
+    this->pcid_cache = new uint16_t[cpu_count];
 
-    for (uint16_t i = 0; i < mp_request.response->cpu_count; ++i) {
-        this->pcid_cache[i] = 0;
-    }
-
-    kernel_proc_init = true;
+    // Since this is a kernel process, PCID is 0
+    memset(this->pcid_cache, 0, cpu_count * sizeof(uint16_t));
 }
 
 Process::Process() {
-    lock.lock();
-    this->pid = next_pid++;
-    lock.unlock();
+    this->pid = next_pid.fetch_add(1, std::memory_order_relaxed);
+    this->next_tid.store(1, std::memory_order_relaxed);
 
     this->map = new memory::PageMap;
     memory::PageMap::create_new(this->map);
 
-    // Array to store the PIC assigned to this process on each CPU.
-    this->pcid_cache = new uint16_t[mp_request.response->cpu_count];
+    size_t user_start = 0x1000;
+    size_t user_end   = 0x00007FFFFFFFF000;
+    this->user_vmm.init(user_start, user_end - user_start);
 
-    for (uint16_t i = 0; i < mp_request.response->cpu_count; ++i) {
-        this->pcid_cache[i] = static_cast<uint16_t>(-1);
-    }
+    // Array to store the PICD assigned to this process on each CPU.
+    size_t cpu_count = mp_request.response->cpu_count;
+    this->pcid_cache = new uint16_t[cpu_count];
+
+    memset(this->pcid_cache, 0xff, cpu_count * sizeof(uint16_t));
 }
 
 Process::~Process() {
-    for (size_t i = 0; i < mp_request.response->cpu_count; ++i) {
-        uint16_t id = this->pcid_cache[i];
+    if (this->pcid_cache) {
+        for (size_t i = 0; i < mp_request.response->cpu_count; ++i) {
+            uint16_t id = this->pcid_cache[i];
 
-        if (id > 0) {
-            memory::PcidManager::get().free_pcid(id);
+            if ((id > 0) && id != static_cast<uint16_t>(-1)) {
+                memory::PcidManager::get().free_pcid(id);
+            }
+
+            delete[] this->pcid_cache;
         }
+    }
+
+    while (!this->children.empty()) {
+        // Manually delete threads and children until a separate reaper
+        // mechanism is implemented.
+        delete &children.front();
     }
 }
 
@@ -105,24 +103,20 @@ void* Process::mmap(size_t count, memory::PageSize size, uint8_t flags) {
     using namespace memory;
 
     size_t align_bytes = 0;
-    size_t step_bytes  = 0;
 
     switch (size) {
         case PageSize::Size4K:
             align_bytes = PAGE_SIZE_4K;
-            step_bytes  = PAGE_SIZE_4K;
             break;
         case PageSize::Size2M:
             align_bytes = PAGE_SIZE_2M;
-            step_bytes  = PAGE_SIZE_2M;
             break;
         case PageSize::Size1G:
             align_bytes = PAGE_SIZE_1G;
-            step_bytes  = PAGE_SIZE_1G;
             break;
     }
 
-    size_t total_bytes = count * step_bytes;
+    size_t total_bytes = count * align_bytes;
 
     // First, reserve a virtual range from the allocator.
     uintptr_t virt_addr = this->user_vmm.alloc_region(total_bytes, align_bytes);
@@ -141,17 +135,15 @@ void* Process::mmap(size_t count, memory::PageSize size, uint8_t flags) {
         if (!this->map->map(curr_virt, flags, CacheType::WriteBack, size)) {
             // Roll back any mappings we already created.
             for (size_t j = 0; j < i; ++j) {
-                uintptr_t addr = virt_addr + (j * step_bytes);
+                uintptr_t addr = virt_addr + (j * align_bytes);
                 this->map->unmap(addr, 0, true);
             }
 
             this->user_vmm.free_region(virt_addr, total_bytes);
-
-            LOG_ERROR("VMM: failed to map page at 0x%lx (rolling back)", curr_virt);
             return nullptr;
         }
 
-        curr_virt += step_bytes;
+        curr_virt += align_bytes;
     }
 
     return reinterpret_cast<void*>(virt_addr);

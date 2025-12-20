@@ -1,7 +1,6 @@
 #pragma once
 
 #include <atomic>
-#include "libs/vector.hpp"
 #include "memory/pagemap.hpp"
 #include "libs/spinlock.hpp"
 #include "memory/vma.hpp"
@@ -15,11 +14,11 @@ namespace kernel::task {
 struct Process;
 
 enum ThreadState : uint32_t {
-    Ready     = (1 << 0),
-    Running   = (1 << 1),
-    Blocked   = (1 << 2),
-    Sleeping  = (1 << 3),
-    Zombie    = (1 << 4),
+    Ready    = (1 << 0),
+    Running  = (1 << 1),
+    Blocked  = (1 << 2),
+    Sleeping = (1 << 3),
+    Zombie   = (1 << 4),
 };
 
 struct SchedulerTag {};
@@ -56,28 +55,33 @@ struct Thread : public IntrusiveListNode<SchedulerTag>, public IntrusiveListNode
     static std::align_val_t fpu_alignment;
 };
 
-struct Process {
+struct Process : public IntrusiveListNode<ProcessTag> {
     size_t pid;
     memory::PageMap* map;
     SpinLock lock;
 
-    Vector<Process*> children;
-    Vector<Thread*> threads;
-
-    int exit_code;
+    uint16_t* pcid_cache;
     std::atomic<size_t> next_tid;
 
-    uint16_t* pcid_cache;
-    memory::VirtualAllocator user_vmm;
+    IntrusiveList<Process, ProcessTag> children;
+    IntrusiveList<Thread, ProcessTag> threads;
 
-    Process(memory::PageMap* map);
-    Process();
+    memory::VirtualAllocator user_vmm;
+    int exit_code;
+
+    static Process* kernel_proc;
+
+    Process(memory::PageMap* map);  // Kernel
+    Process();                      // User
     ~Process();
 
     void* mmap(size_t count, memory::PageSize size, uint8_t flags);
     void munmap(void* addr, size_t count, memory::PageSize size);
 
     static void init();
+
+   private:
+    static std::atomic<size_t> next_pid;
 };
 
 extern Process* kernel_proc;

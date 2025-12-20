@@ -8,7 +8,7 @@ void PcidManager::init() {
     memset(this->slots, 0, sizeof(task::Process*) * MAX_PCID_NUM);
     memset(this->used_bitmap, 0, sizeof(uint64_t) * (MAX_PCID_NUM / 64));
     this->used_bitmap[0] |= 1;
-    this->slots[0] = task::kernel_proc;
+    this->slots[0] = task::Process::kernel_proc;
 }
 
 uint16_t PcidManager::get_pcid(task::Process* proc) {

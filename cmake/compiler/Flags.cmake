@@ -165,7 +165,7 @@ set(
 	-serial stdio
 	-rtc base=localtime
 	-boot order=d,menu=on,splash-time=0	
-	# -smp 2
+	-smp 2
 )
 
 if(${PROJECT_NAME}_ARCHITECTURE STREQUAL "x86_64")
