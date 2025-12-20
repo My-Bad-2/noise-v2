@@ -5,6 +5,7 @@
 #include "memory/pagemap.hpp"
 #include "libs/spinlock.hpp"
 #include "memory/vma.hpp"
+#include "libs/intrusive_list.hpp"
 
 namespace kernel::cpu {
 struct PerCpuData;
@@ -46,7 +47,7 @@ struct Process {
     static void init();
 };
 
-struct Thread {
+struct Thread : IntrusiveListNode {
     size_t tid;
     uintptr_t kernel_stack_ptr;
 

@@ -15,9 +15,7 @@ class RescheduleHandler : public cpu::IInterruptHandler {
     }
 
     cpu::IrqStatus handle(cpu::arch::TrapFrame*) {
-        Scheduler& sched = Scheduler::get();
-        sched.schedule();
-
+        // IRQ handler will handle rescheduling
         return cpu::IrqStatus::Handled;
     }
 };

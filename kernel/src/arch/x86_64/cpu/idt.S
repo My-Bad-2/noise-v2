@@ -1,7 +1,8 @@
 .section .text
 
-.global .trap_return
+.global trap_return
 .extern exception_handler
+.extern check_reschedule
 .type interrupt_common_stub, @function
 # interrupt_common_stub:
 #  - Saves all GPRs into a TrapFrame-compatible layout.
@@ -37,8 +38,15 @@ interrupt_common_stub:
 1:
     call exception_handler
 
-.trap_return:
-    # Check CS again to see if we are returning to User Mode
+    # Reschedule if we are returning to user mode.
+    movq 144(%rsp), %rax
+    testb $3, %al   # Check RPL (User Mode?)
+    jz trap_return # If returning to Kernel, skip rescheduling
+
+    call check_reschedule
+
+trap_return:
+    # Check CS again to see if we need to swapgs back
     movq 144(%rsp), %rax
     testb $3, %al
     jz 2f

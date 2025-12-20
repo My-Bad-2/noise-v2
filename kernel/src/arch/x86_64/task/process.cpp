@@ -6,7 +6,7 @@
 #include <new>
 #include "cpu/simd.hpp"
 
-extern "C" void switch_trampoline();
+extern "C" void trap_return();
 
 namespace kernel::task {
 using namespace cpu::arch;
@@ -61,7 +61,7 @@ void setup_kstack(Thread* thread, uintptr_t entry, uintptr_t arg) {
     frame->rdi    = arg;
     frame->rip    = entry;
 
-    context->return_address = reinterpret_cast<uintptr_t>(switch_trampoline);
+    context->return_address = reinterpret_cast<uintptr_t>(trap_return);
 }
 }  // namespace
 

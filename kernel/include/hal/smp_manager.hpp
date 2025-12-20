@@ -19,6 +19,7 @@ struct alignas(CACHE_LINE_SIZE) PerCpuData {
     uint32_t core_idx;
 
     bool is_bsp;
+    bool reschedule_needed;
     std::atomic<bool> is_online;
 
     uintptr_t kstack_top;

@@ -91,4 +91,16 @@ CpuCoreManager& CpuCoreManager::get() {
     static CpuCoreManager manager;
     return manager;
 }
+
+extern "C" void check_reschedule() {
+    PerCpuData* cpu = CpuCoreManager::get().get_current_core();
+
+    // Check if a reschedule is needed
+    if (cpu->reschedule_needed) {
+        cpu->reschedule_needed = false;
+
+        // This will save the current context and jump to the next thread.
+        cpu->sched.schedule();
+    }
+}
 }  // namespace kernel::cpu

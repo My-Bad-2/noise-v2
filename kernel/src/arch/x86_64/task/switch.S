@@ -1,7 +1,16 @@
 .section .text
+
+.extern trap_return
+.global new_thread_entry
+.type new_thread_entry, @function
+new_thread_entry:
+    fninit
+    // MAGIC: Check SIMD::init() for ldmxcsr value description
+    ldmxcsr $0x1f80
+    jmp trap_return
+
 .global context_switch
 .type context_switch, @function
-
 context_switch:
     pushq %rbx
     pushq %rbp
@@ -10,8 +19,8 @@ context_switch:
     pushq %r14
     pushq %r15
 
-    movq %rsp, 8(%rdi)
-    movq 8(%rsi), %rsp
+    movq %rsp, 24(%rdi)
+    movq 24(%rsi), %rsp
 
     popq %r15
     popq %r14
@@ -20,11 +29,4 @@ context_switch:
     popq %rbp
     popq %rbx
 
-    ret
-
-.extern .trap_return
-.global switch_trampoline
-.type switch_trampoline, @function
-
-switch_trampoline:
-    jmp .trap_return
+    ret 

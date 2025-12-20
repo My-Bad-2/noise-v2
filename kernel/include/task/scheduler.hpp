@@ -1,6 +1,5 @@
 #pragma once
 
-#include "libs/deque.hpp"
 #include "hal/interface/interrupt.hpp"
 #include "libs/min_heap.hpp"
 #include "libs/spinlock.hpp"
@@ -40,7 +39,7 @@ struct Scheduler {
     Thread* try_steal();
 
     SpinLock lock;
-    Deque<Thread*>* ready_queue;
+    IntrusiveList<Thread>* ready_queue;
     MinHeap<Thread*> sleeping_queue;
     uint32_t cpu_id;
     uint32_t active_queues_bitmap;
