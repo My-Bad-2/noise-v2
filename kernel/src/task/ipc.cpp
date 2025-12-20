@@ -100,66 +100,93 @@ void IPCPort::close() {
 size_t PortManager::create_port() {
     LockGuard guard(this->lock);
 
-    size_t new_id;
+    uint32_t index;
     IPCPort* new_port;
 
-    if (!this->free_ids.empty()) {
-        new_id = this->free_ids.back();
-        this->free_ids.pop_back();
-
-        new_port            = new IPCPort(new_id);
-        this->ports[new_id] = new_port;
+    if (!this->free_indices.empty()) {
+        index = this->free_indices.back();
+        this->free_indices.pop_back();
     } else {
-        new_id   = this->ports.size();
-        new_port = new IPCPort(new_id);
-
-        this->ports.push_back(new_port);
+        index = static_cast<uint32_t>(this->table.size());
+        this->table.push_back(PortEntry{});
     }
 
-    return new_id;
+    this->table[index].port = new IPCPort(index);
+    size_t handle           = (static_cast<size_t>(this->table[index].generation) << 32) | index;
+    return handle;
 }
 
-IPCPort* PortManager::get_port(size_t id) {
+IPCPort* PortManager::get_port(size_t handle) {
+    uint32_t index = handle & 0xFFFFFFFF;
+    uint32_t gen   = handle >> 32;
+
     LockGuard guard(this->lock);
 
-    if (id >= this->ports.size()) {
+    if (index >= this->table.size()) {
         return nullptr;
     }
 
-    return this->ports[id];
+    // If the slot's generation doesn't match the handle's,
+    // the handle is stale (the port was destroyed and recreated).
+    if (table[index].generation != gen) {
+        return nullptr;
+    }
+
+    return this->table[index].port;
 }
 
-void PortManager::destroy_port(size_t id) {
+void PortManager::destroy_port(size_t handle) {
+    uint32_t index = handle & 0xFFFFFFFF;
+    uint32_t gen   = handle >> 32;
+
     IPCPort* target = nullptr;
 
     {
         LockGuard(this->lock);
 
-        if (id >= this->ports.size() || this->ports[id] == nullptr) {
+        if (index >= this->table.size()) {
             return;
         }
 
-        target          = this->ports[id];
-        this->ports[id] = nullptr;
+        // Stale handle
+        if (this->table[index].generation != gen) {
+            return;
+        }
 
-        this->free_ids.push_back(id);
+        target                  = this->table[index].port;
+        this->table[index].port = nullptr;
+
+        // Increment generation so old handles become invalid
+        this->table[index].generation++;
+
+        this->free_indices.push_back(index);
     }
 
     if (target) {
         target->close();
-
         delete target;
     }
 }
 
-bool PortManager::is_valid_port(size_t id) {
+bool PortManager::is_valid_port(size_t handle) {
+    uint32_t index = handle & 0xFFFFFFFF;
+    uint32_t gen   = handle >> 32;
+
     LockGuard guard(this->lock);
 
-    if (id >= this->ports.size()) {
+    if (index >= this->table.size()) {
         return false;
     }
 
-    if (this->ports[id] == nullptr) {
+    // if the handle's generation doesn't match the table's
+    // it means the original port was deleted and a new one
+    // was created at the same index. This handle is STALE
+    // and must be rejected.
+    if (this->table[index].generation != gen) {
+        return false;
+    }
+
+    if (this->table[index].port == nullptr) {
         return false;
     }
 

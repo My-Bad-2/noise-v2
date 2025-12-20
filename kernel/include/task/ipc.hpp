@@ -34,6 +34,11 @@ struct IPCPort {
     void close();
 };
 
+struct PortEntry {
+    IPCPort* port       = nullptr;
+    uint32_t generation = 0;
+};
+
 class PortManager {
    public:
     size_t create_port();
@@ -46,7 +51,7 @@ class PortManager {
 
    private:
     SpinLock lock;
-    Vector<IPCPort*> ports;
-    Vector<size_t> free_ids;
+    Vector<PortEntry> table;
+    Vector<uint32_t> free_indices;
 };
 }  // namespace kernel::task
