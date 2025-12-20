@@ -222,6 +222,30 @@ class IntrusiveList {
         this->root.prev = &this->root;
     }
 
+    [[gnu::always_inline]] inline void remove(T& value) noexcept {
+        Node* n = static_cast<Node*>(&value);
+
+        // If the node is not linked, do nothing
+        if (n->next == n) {
+            return;
+        }
+
+        Node* next = n->next;
+        Node* prev = n->prev;
+
+        prev->next = next;
+        next->prev = prev;
+
+        n->next = n;
+        n->prev = n;
+    }
+
+    [[gnu::always_inline]] inline void remove(T* value) noexcept {
+        if (value) {
+            this->remove(*value);
+        }
+    }
+
     friend class Iterator;
 
    private:

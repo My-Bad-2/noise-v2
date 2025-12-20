@@ -18,6 +18,9 @@ constexpr uint16_t TIME_SLICE_QUANTA[32] = {10,  12,  13,  15,  17,  20,  23,  2
                                             216, 249, 286, 329, 379, 435, 501, 576, 662, 761};
 }  // namespace
 
+IntrusiveList<Thread, SchedulerTag> Scheduler::zombie_list;
+SpinLock Scheduler::zombie_lock;
+
 void Scheduler::add_thread(Thread* t) {
     if (t->priority >= MLFQ_LEVELS) {
         t->priority = MLFQ_LEVELS - 1;
@@ -485,6 +488,14 @@ void Scheduler::terminate() {
 
     curr->state = Zombie;
 
+    // Timestamp the death
+    curr->last_run_timestamp = this->current_ticks;
+
+    {
+        LockGuard guard(zombie_lock);
+        zombie_list.push_back(*curr);
+    }
+
     lock.lock();
     Thread* next = this->get_next_thread();
     lock.unlock();
@@ -510,7 +521,7 @@ void Scheduler::terminate() {
 
     context_switch(curr, next);
 
-    // Welcome to Afterlife, Mr. Zombie. The kernel is fucked.
+    // Welcome from Afterlife, Mr. Zombie. The kernel is fucked.
     PANIC("Zombie wants REVENGE!");
 }
 
@@ -558,6 +569,54 @@ void Scheduler::scan_for_starvation() {
     }
 }
 
+void Scheduler::reap_zombies() {
+    LockGuard guard(zombie_lock);
+
+    if (zombie_list.empty()) {
+        return;
+    }
+
+    auto it = zombie_list.begin();
+
+    if (it == nullptr) {
+        return;
+    }
+
+    while (it != zombie_list.end()) {
+        auto next_it = it;
+        ++next_it;
+
+        Thread* t = &(*it);
+
+        // Ensure the thread has been dead long enough for context switch
+        // to have definitely finished on the original core.
+        // 2ms is enough for now.
+        if ((this->current_ticks - t->last_run_timestamp) <= 2) {
+            it = next_it;
+            continue;
+        }
+
+        zombie_list.remove(*t);
+
+        if (Process* owner = t->owner) {
+            LockGuard proc_guard(owner->lock);
+            owner->threads.remove(*t);
+        }
+
+        if (t->kernel_stack) {
+            delete[] t->kernel_stack;
+        }
+
+        if (t->fpu_storage) {
+            delete[] t->fpu_storage;
+        }
+
+        delete t;
+
+        it = next_it;
+    }
+}
+
 Scheduler& Scheduler::get() {
     return cpu::CpuCoreManager::get().get_current_core()->sched;
 }
@@ -579,6 +638,14 @@ void Scheduler::init(uint32_t id) {
             [](void*) {
                 Scheduler& sched = Scheduler::get();
                 sched.scan_for_starvation();
+            },
+            nullptr);
+
+        timer.schedule(
+            hal::TimerMode::Periodic, DEATH_REAPER_INTERVAL,
+            [](void*) {
+                Scheduler& sched = Scheduler::get();
+                sched.reap_zombies();
             },
             nullptr);
 
