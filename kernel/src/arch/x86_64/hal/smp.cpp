@@ -124,6 +124,7 @@ void PerCpuData::commit() {
     kernel::arch::Msr msr;
     msr.index = MSR_GS_BASE;
     msr.value = reinterpret_cast<uintptr_t>(this);
+    LOG_DEBUG("msr = 0x%lx", msr.value);
     msr.write();
 
     hal::Timer::init();
@@ -152,6 +153,7 @@ void CpuCoreManager::ap_main(PerCpuData* data) {
 
     data->is_online.store(true);
     init_syscalls();
+    memory::PageMap::global_init();
     kernel::arch::enable_interrupts();
 
     LOG_INFO("AP Core %u (APIC %u) is online!", data->core_idx, data->apic_id);
@@ -170,7 +172,7 @@ void CpuCoreManager::ap_entry_func(limine_mp_info* info) {
 }
 
 PerCpuData* CpuCoreManager::get_current_core() {
-    PerCpuData* val;
+    PerCpuData* val = nullptr;
     asm volatile("mov %%gs:0, %0" : "=r"(val));
     return val;
 }

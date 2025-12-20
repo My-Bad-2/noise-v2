@@ -1,6 +1,7 @@
 #include "hal/acpi.hpp"
 #include "hal/smp_manager.hpp"
 #include "libs/log.hpp"
+#include "task/process.hpp"
 
 extern "C" uint8_t kernel_stack[KSTACK_SIZE] = {};
 
@@ -16,6 +17,11 @@ extern "C" void kmain() {
     arch::init();
 
     LOG_INFO("Hello, World!");
+
+    void* user_test = task::kernel_proc->mmap(2, memory::PageSize::Size4K,
+                                              memory::Read | memory::Write | memory::Execute);
+
+    LOG_DEBUG("user_test = %p", user_test);
     cpu::CpuCoreManager::get().init(bsp_stack_top);
 }
 }  // namespace kernel

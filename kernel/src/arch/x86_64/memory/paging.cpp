@@ -692,7 +692,7 @@ void PageMap::global_init() {
     init_pat();
 
     // LOG_INFO("Paging: initialized (levels=%d 1G=%d PCID=%d)", max_levels, support_1g_pages,
-            //  pcid_supported);
+    //  pcid_supported);
 }
 
 bool PageMap::is_active() const {

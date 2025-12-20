@@ -4,6 +4,7 @@
 #include "libs/vector.hpp"
 #include "memory/pagemap.hpp"
 #include "libs/spinlock.hpp"
+#include "memory/vma.hpp"
 
 namespace kernel::cpu {
 struct PerCpuData;
@@ -33,10 +34,14 @@ struct Process {
     SpinLock lock;
 
     uint16_t* pcid_cache;
+    memory::VirtualAllocator user_vmm;
 
     Process(memory::PageMap* map);
     Process();
     ~Process();
+
+    void* mmap(size_t count, memory::PageSize size, uint8_t flags);
+    void munmap(void* addr, size_t count, memory::PageSize size);
 
     static void init();
 };

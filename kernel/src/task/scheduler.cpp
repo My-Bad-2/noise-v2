@@ -131,9 +131,10 @@ void Scheduler::schedule() {
     // Select the next runnable thread under the scheduler lock.
     lock.lock();
 
-    if (this->current_ticks % 50 == 0) {
-        this->scan_for_starvation();
-    }
+    // TODO: Switch to intrusive list and fix scan_for_starvation
+    // if (this->current_ticks % 50 == 0) {
+    //     this->scan_for_starvation();
+    // }
 
     Thread* next = this->get_next_thread();
     lock.unlock();
@@ -407,7 +408,12 @@ void Scheduler::scan_for_starvation() {
     for (int prio = 1; prio < MLFQ_LEVELS; ++prio) {
         auto& queue = this->ready_queue[prio];
 
+        if (queue.empty()) {
+            continue;
+        }
+
         auto it = queue.begin();
+
         while (it != queue.end()) {
             Thread* t = *it;
 
