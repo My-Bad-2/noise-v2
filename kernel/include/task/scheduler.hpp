@@ -39,7 +39,7 @@ struct Scheduler {
     Thread* try_steal();
 
     SpinLock lock;
-    IntrusiveList<Thread>* ready_queue;
+    IntrusiveList<Thread, SchedulerTag>* ready_queue;
     MinHeap<Thread*> sleeping_queue;
     uint32_t cpu_id;
     uint32_t active_queues_bitmap;

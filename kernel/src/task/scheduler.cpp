@@ -34,7 +34,7 @@ void Scheduler::add_thread(Thread* t) {
         LockGuard guard(this->lock);
 
         // If `t` is already in a list, pushing it again will corrupt pointers and hang the kernel.
-        if (t->is_linked()) {
+        if (is_linked<SchedulerTag>(*t)) {
             return;
         }
 
@@ -584,6 +584,6 @@ void Scheduler::init(uint32_t id) {
 
     this->cpu_id               = id;
     this->active_queues_bitmap = 0;
-    this->ready_queue          = new IntrusiveList<Thread>[MLFQ_LEVELS];
+    this->ready_queue          = new IntrusiveList<Thread, SchedulerTag>[MLFQ_LEVELS];
 }
 }  // namespace kernel::task

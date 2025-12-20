@@ -32,8 +32,8 @@ context_switch:
     pushq %r14
     pushq %r15
 
-    movq %rsp, 24(%rdi)
-    movq 24(%rsi), %rsp
+    movq %rsp, 40(%rdi)
+    movq 40(%rsi), %rsp
 
     popq %r15
     popq %r14

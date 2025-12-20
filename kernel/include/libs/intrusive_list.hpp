@@ -3,6 +3,9 @@
 #include <iterator>
 
 namespace kernel {
+struct DefaultTag {};
+
+template <typename Tag = DefaultTag>
 struct IntrusiveListNode {
     IntrusiveListNode* prev = this;
     IntrusiveListNode* next = this;
@@ -19,9 +22,23 @@ struct IntrusiveListNode {
     }
 };
 
-template <typename T, bool AutoUnlink = false>
+template <typename Tag, typename T>
+bool is_linked(const T& obj) {
+    return static_cast<const IntrusiveListNode<Tag>&>(obj).is_linked();
+}
+
+template <typename Tag, typename T>
+bool is_linked(const T* obj) {
+    if (!obj) {
+        return false;
+    }
+
+    return static_cast<const IntrusiveListNode<Tag>&>(obj)->is_linked();
+}
+
+template <typename T, typename Tag = DefaultTag, bool AutoUnlink = false>
 class IntrusiveList {
-    IntrusiveListNode root;
+    using Node = IntrusiveListNode<Tag>;
 
    public:
     class Iterator {
@@ -32,7 +49,7 @@ class IntrusiveList {
         using pointer           = T*;
         using reference         = T&;
 
-        [[gnu::always_inline]] inline Iterator(IntrusiveListNode* node_) : node_(node_) {}
+        [[gnu::always_inline]] inline Iterator(Node* node_) : node_(node_) {}
 
         [[gnu::always_inline]] inline reference operator*() const {
             return *static_cast<T*>(this->node_);
@@ -74,12 +91,12 @@ class IntrusiveList {
             return this->node_ != other.node_;
         }
 
-        [[gnu::always_inline]] inline IntrusiveListNode* node() const {
+        [[gnu::always_inline]] inline Node* node() const {
             return this->node_;
         }
 
        private:
-        IntrusiveListNode* node_;
+        Node* node_;
     };
 
     IntrusiveList() noexcept {
@@ -126,8 +143,8 @@ class IntrusiveList {
     }
 
     [[gnu::always_inline]] inline void push_back(T& value) noexcept {
-        IntrusiveListNode* n    = static_cast<IntrusiveListNode*>(&value);
-        IntrusiveListNode* prev = this->root.prev;
+        Node* n    = static_cast<Node*>(&value);
+        Node* prev = this->root.prev;
 
         n->next         = &this->root;
         n->prev         = prev;
@@ -136,8 +153,8 @@ class IntrusiveList {
     }
 
     [[gnu::always_inline]] inline void push_front(T& value) noexcept {
-        IntrusiveListNode* n    = static_cast<IntrusiveListNode*>(&value);
-        IntrusiveListNode* next = this->root.next;
+        Node* n    = static_cast<Node*>(&value);
+        Node* next = this->root.next;
 
         n->prev         = &this->root;
         n->next         = next;
@@ -154,9 +171,9 @@ class IntrusiveList {
     }
 
     [[gnu::always_inline]] inline Iterator insert(Iterator pos, T& value) noexcept {
-        IntrusiveListNode* n    = static_cast<IntrusiveListNode*>(&value);
-        IntrusiveListNode* next = pos.node();
-        IntrusiveListNode* prev = next->prev;
+        Node* n    = static_cast<Node*>(&value);
+        Node* next = pos.node();
+        Node* prev = next->prev;
 
         n->next    = next;
         n->prev    = prev;
@@ -167,9 +184,9 @@ class IntrusiveList {
     }
 
     [[gnu::always_inline]] inline Iterator erase(Iterator pos) noexcept {
-        IntrusiveListNode* n    = pos.node();
-        IntrusiveListNode* next = n->next;
-        IntrusiveListNode* prev = n->prev;
+        Node* n    = pos.node();
+        Node* next = n->next;
+        Node* prev = n->prev;
 
         prev->next = next;
         next->prev = prev;
@@ -178,24 +195,24 @@ class IntrusiveList {
     }
 
     [[gnu::always_inline]] inline void pop_front() noexcept {
-        IntrusiveListNode* n    = this->root.next;
-        IntrusiveListNode* next = n->next;
-        this->root.next         = next;
-        next->prev              = &this->root;
+        Node* n         = this->root.next;
+        Node* next      = n->next;
+        this->root.next = next;
+        next->prev      = &this->root;
     }
 
     [[gnu::always_inline]] inline void pop_back() noexcept {
-        IntrusiveListNode* n    = this->root.prev;
-        IntrusiveListNode* prev = n->prev;
-        this->root.prev         = prev;
-        prev->next              = &this->root;
+        Node* n         = this->root.prev;
+        Node* prev      = n->prev;
+        this->root.prev = prev;
+        prev->next      = &this->root;
     }
 
     void clear() noexcept {
         if constexpr (AutoUnlink) {
-            IntrusiveListNode* cur = this->root.next;
+            Node* cur = this->root.next;
             while (cur != &this->root) {
-                IntrusiveListNode* next = cur->next;
+                Node* next = cur->next;
                 cur->prev = cur->next = cur;  // Reset node
                 cur                   = next;
             }
@@ -204,5 +221,10 @@ class IntrusiveList {
         this->root.next = &this->root;
         this->root.prev = &this->root;
     }
+
+    friend class Iterator;
+
+   private:
+    Node root;
 };
 }  // namespace kernel

@@ -6,11 +6,22 @@
 #include "memory/pcid_manager.hpp"
 #include "task/process.hpp"
 #include "libs/math.hpp"
+#include "task/scheduler.hpp"
 
 namespace kernel::cpu {
 namespace {
 void idle_worker(void*) {
     kernel::arch::halt(true);
+}
+
+void worker(void* arg) {
+    const char* name = (const char*)arg;
+
+    while (true) {
+        LOG_DEBUG("Hello from Thread %s", name);
+
+        task::Scheduler::get().sleep(20);
+    }
 }
 }  // namespace
 
@@ -77,6 +88,13 @@ void CpuCoreManager::init(void* bsp_stack_top) {
             kernel::arch::pause();
         }
     }
+
+    // Uncomment these while testing any changes in scheduler
+    // auto t1 = new task::Thread(task::kernel_proc, worker, (void*)"A", cores[0]);
+    // auto t2 = new task::Thread(task::kernel_proc, worker, (void*)"B", cores[0]);
+
+    // cores[0]->sched.add_thread(t1);
+    // cores[0]->sched.add_thread(t2);
 }
 
 size_t CpuCoreManager::get_total_cores() const {

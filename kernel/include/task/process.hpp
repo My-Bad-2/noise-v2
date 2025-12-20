@@ -12,42 +12,20 @@ struct PerCpuData;
 }
 
 namespace kernel::task {
-struct Thread;
+struct Process;
 
 enum ThreadState : uint32_t {
     Ready     = (1 << 0),
     Running   = (1 << 1),
     Blocked   = (1 << 2),
-    Suspended = (1 << 3),
-    Sleeping  = (1 << 4),
-    Zombie    = (1 << 5),
+    Sleeping  = (1 << 3),
+    Zombie    = (1 << 4),
 };
 
-struct Process {
-    size_t pid;
-    memory::PageMap* map;
+struct SchedulerTag {};
+struct ProcessTag {};
 
-    Vector<Process*> children;
-    Vector<Thread*> threads;
-
-    int exit_code;
-    std::atomic<size_t> next_tid;
-    SpinLock lock;
-
-    uint16_t* pcid_cache;
-    memory::VirtualAllocator user_vmm;
-
-    Process(memory::PageMap* map);
-    Process();
-    ~Process();
-
-    void* mmap(size_t count, memory::PageSize size, uint8_t flags);
-    void munmap(void* addr, size_t count, memory::PageSize size);
-
-    static void init();
-};
-
-struct Thread : IntrusiveListNode {
+struct Thread : public IntrusiveListNode<SchedulerTag>, public IntrusiveListNode<ProcessTag> {
     size_t tid;
     uintptr_t kernel_stack_ptr;
 
@@ -76,6 +54,30 @@ struct Thread : IntrusiveListNode {
     static std::byte* clean_fpu_state;
     static size_t fpu_state_size;
     static std::align_val_t fpu_alignment;
+};
+
+struct Process {
+    size_t pid;
+    memory::PageMap* map;
+    SpinLock lock;
+
+    Vector<Process*> children;
+    Vector<Thread*> threads;
+
+    int exit_code;
+    std::atomic<size_t> next_tid;
+
+    uint16_t* pcid_cache;
+    memory::VirtualAllocator user_vmm;
+
+    Process(memory::PageMap* map);
+    Process();
+    ~Process();
+
+    void* mmap(size_t count, memory::PageSize size, uint8_t flags);
+    void munmap(void* addr, size_t count, memory::PageSize size);
+
+    static void init();
 };
 
 extern Process* kernel_proc;
