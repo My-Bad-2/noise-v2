@@ -52,27 +52,30 @@ struct Thread : IntrusiveListNode {
     uintptr_t kernel_stack_ptr;
 
     cpu::PerCpuData* cpu;
-    std::byte* kernel_stack;
-    Process* owner;
-
     ThreadState state;
     uint16_t priority;
     uint16_t quantum;
 
-    size_t wake_time_ticks;
-
     std::byte* fpu_storage;
-    size_t last_run_timestamp;
+    size_t wake_time_ticks;
     size_t wait_start_timestamp;
+    size_t last_run_timestamp;
+
+    Process* owner;
+    std::byte* kernel_stack;
+    bool is_user_thread;
 
     Thread() = default;
-    Thread(Process* parent, void (*callback)(void*), void* args, void* curr_cpu = nullptr);
+    Thread(Process* parent, void (*callback)(void*), void* args, void* curr_cpu = nullptr,
+           bool is_user = false);
     ~Thread() {}
-
-    void late_init();
 
    private:
     void arch_init(uintptr_t entry, uintptr_t arg);
+
+    static std::byte* clean_fpu_state;
+    static size_t fpu_state_size;
+    static std::align_val_t fpu_alignment;
 };
 
 extern Process* kernel_proc;

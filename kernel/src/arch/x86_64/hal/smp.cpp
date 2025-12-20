@@ -124,7 +124,6 @@ void PerCpuData::commit() {
     kernel::arch::Msr msr;
     msr.index = MSR_GS_BASE;
     msr.value = reinterpret_cast<uintptr_t>(this);
-    LOG_DEBUG("msr = 0x%lx", msr.value);
     msr.write();
 
     hal::Timer::init();

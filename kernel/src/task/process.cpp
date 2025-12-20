@@ -15,21 +15,18 @@ size_t next_pid;
 
 Process* kernel_proc = nullptr;
 
-Thread::Thread(Process* proc, void (*callback)(void*), void* args, void* ptr) {
+Thread::Thread(Process* proc, void (*callback)(void*), void* args, void* ptr, bool is_user) {
     if (proc == nullptr) {
         PANIC("Task: Thread's parent process not present!");
     }
 
-    this->priority = 0;
-    this->owner    = proc;
-    this->state    = Ready;
+    this->owner          = proc;
+    this->priority       = 0;
+    this->state          = Ready;
+    this->is_user_thread = is_user;
 
     this->last_run_timestamp   = 0;
     this->wait_start_timestamp = 0;
-
-    proc->lock.lock();
-    this->tid = proc->next_tid++;
-    proc->lock.unlock();
 
     if (!ptr) {
         this->cpu = cpu::CpuCoreManager::get().get_current_core();
@@ -37,8 +34,13 @@ Thread::Thread(Process* proc, void (*callback)(void*), void* args, void* ptr) {
         this->cpu = reinterpret_cast<cpu::PerCpuData*>(ptr);
     }
 
+    {
+        LockGuard guard(proc->lock);
+        this->tid = proc->next_tid++;
+        proc->threads.push_back(this);
+    }
+
     this->arch_init(reinterpret_cast<uintptr_t>(callback), reinterpret_cast<uintptr_t>(args));
-    this->owner->threads.push_back(this);
 }
 
 Process::Process(memory::PageMap* map) : map(map) {

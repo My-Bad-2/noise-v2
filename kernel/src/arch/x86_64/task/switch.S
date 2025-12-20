@@ -6,8 +6,21 @@
 new_thread_entry:
     fninit
     // MAGIC: Check SIMD::init() for ldmxcsr value description
-    ldmxcsr $0x1f80
+    movl $0x1f80, %eax
+    pushq %rax
+    ldmxcsr (%rsp)
+    addq $8, %rsp
     jmp trap_return
+
+.extern thread_exit
+.global kernel_thread_entry
+.type kernel_thread_entry, @function
+kernel_thread_entry:
+    popq %rdi   // Pop Argument
+    popq %rax   // Pop `entry_function`
+    sti
+    call *%rax
+    call thread_exit
 
 .global context_switch
 .type context_switch, @function

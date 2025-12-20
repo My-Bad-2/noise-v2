@@ -18,10 +18,6 @@ extern "C" void kmain() {
 
     LOG_INFO("Hello, World!");
 
-    void* user_test = task::kernel_proc->mmap(2, memory::PageSize::Size4K,
-                                              memory::Read | memory::Write | memory::Execute);
-
-    LOG_DEBUG("user_test = %p", user_test);
     cpu::CpuCoreManager::get().init(bsp_stack_top);
 }
 }  // namespace kernel

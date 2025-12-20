@@ -4,8 +4,8 @@
 
 namespace kernel {
 struct IntrusiveListNode {
-    IntrusiveListNode* prev;
-    IntrusiveListNode* next;
+    IntrusiveListNode* prev = this;
+    IntrusiveListNode* next = this;
 
     [[gnu::always_inline]] inline void unlink() {
         IntrusiveListNode* p = prev;
