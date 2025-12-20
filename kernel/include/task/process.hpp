@@ -23,8 +23,11 @@ enum ThreadState : uint32_t {
 
 struct SchedulerTag {};
 struct ProcessTag {};
+struct WaitTag {};
 
-struct Thread : public IntrusiveListNode<SchedulerTag>, public IntrusiveListNode<ProcessTag> {
+struct Thread : public IntrusiveListNode<SchedulerTag>,
+                public IntrusiveListNode<ProcessTag>,
+                public IntrusiveListNode<WaitTag> {
     size_t tid;
     uintptr_t kernel_stack_ptr;
 
