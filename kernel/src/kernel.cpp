@@ -17,7 +17,6 @@ extern "C" void kmain() {
     arch::init();
 
     LOG_INFO("Hello, World!");
-
     cpu::CpuCoreManager::get().init(bsp_stack_top);
 }
 }  // namespace kernel

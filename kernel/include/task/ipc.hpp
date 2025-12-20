@@ -1,6 +1,7 @@
 #pragma once
 
 #include "task/process.hpp"
+#include "libs/vector.hpp"
 
 #define PORT_QUEUE_CAPACITY 32
 #define MAX_MSG_DATA        256
@@ -30,5 +31,22 @@ struct IPCPort {
 
     bool send(Thread* sender, const uint8_t* data, size_t len);
     size_t receive(Thread* receiver, uint8_t* out_buf, size_t max_len);
+    void close();
+};
+
+class PortManager {
+   public:
+    size_t create_port();
+    IPCPort* get_port(size_t id);
+    void destroy_port(size_t id);
+
+    bool is_valid_port(size_t id);
+
+    static PortManager& get();
+
+   private:
+    SpinLock lock;
+    Vector<IPCPort*> ports;
+    Vector<size_t> free_ids;
 };
 }  // namespace kernel::task

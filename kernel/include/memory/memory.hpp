@@ -1,8 +1,3 @@
-/**
- * @file memory.hpp
- * @brief Core memory utilities and higher-half direct-map helpers.
- */
-
 #pragma once
 
 #include <cstdint>

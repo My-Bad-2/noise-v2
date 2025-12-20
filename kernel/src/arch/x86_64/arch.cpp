@@ -1,12 +1,3 @@
-/**
- * @file arch.cpp
- * @brief x86_64 architecture-specific bootstrap and helpers.
- *
- * This source file contains the concrete implementation of the minimal
- * x86_64 architecture interface declared in `arch.hpp`. It wires up a
- * simple kernel console UART and provides basic CPU control helpers.
- */
-
 #include "arch.hpp"
 #include "cpu/exception.hpp"
 #include "cpu/regs.h"
@@ -21,16 +12,13 @@
 #include "hal/ioapic.hpp"
 
 namespace kernel::arch {
-namespace {
-handlers::DFHandler df_handler;
-
 void initialize_interrupt_subsystem() {
+    static handlers::DFHandler df_handler;
     cpu::arch::IDTManager::setup_idt();
     cpu::arch::InterruptDispatcher::register_handler(EXCEPTION_DOUBLE_FAULT, &df_handler);
     hal::LegacyPIC::remap();
     hal::IOAPIC::init();
 }
-}  // namespace
 
 void init() {
     // Architecture-specific initialization hook.

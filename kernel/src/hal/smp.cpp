@@ -15,7 +15,7 @@ void idle_worker(void*) {
 }
 
 void worker(void* arg) {
-    const char* name = (const char*)arg;
+    const char* name = static_cast<const char*>(arg);
 
     while (true) {
         LOG_DEBUG("Hello from Thread %s", name);
