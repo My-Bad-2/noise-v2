@@ -5,22 +5,27 @@
 
 namespace kernel {
 namespace __details {
-enum class LockType : uint8_t { SpinlockSpin, SpinlockIrq, Irq };
+enum class LockType : uint8_t {
+    SpinlockSpin,
+    SpinlockIrq,
+    Irq,
+    RwLock,
+};
 
 template <LockType type>
-class Spinlock;
+class BaseLock;
 
 template <>
-class Spinlock<LockType::SpinlockSpin> {
+class BaseLock<LockType::SpinlockSpin> {
    public:
-    constexpr Spinlock() : next_ticket(0), serving_ticket(0) {}
+    constexpr BaseLock() : next_ticket(0), serving_ticket(0) {}
 
     // Spinlocks are non-copyable and non-movable to avoid accidental sharing.
-    Spinlock(const Spinlock&) = delete;
-    Spinlock(Spinlock&&)      = delete;
+    BaseLock(const BaseLock&) = delete;
+    BaseLock(BaseLock&&)      = delete;
 
-    Spinlock& operator=(const Spinlock&) = delete;
-    Spinlock& operator=(Spinlock&&)      = delete;
+    BaseLock& operator=(const BaseLock&) = delete;
+    BaseLock& operator=(BaseLock&&)      = delete;
 
     void lock() {
         // Reserve our ticket number atomically.
@@ -68,16 +73,16 @@ class Spinlock<LockType::SpinlockSpin> {
 };
 
 template <>
-class Spinlock<LockType::Irq> {
+class BaseLock<LockType::Irq> {
    public:
-    constexpr Spinlock() : interrupts(false) {}
+    constexpr BaseLock() : interrupts(false) {}
 
     // Spinlocks are non-copyable and non-movable to avoid accidental sharing.
-    Spinlock(const Spinlock&) = delete;
-    Spinlock(Spinlock&&)      = delete;
+    BaseLock(const BaseLock&) = delete;
+    BaseLock(BaseLock&&)      = delete;
 
-    Spinlock& operator=(const Spinlock&) = delete;
-    Spinlock& operator=(Spinlock&&)      = delete;
+    BaseLock& operator=(const BaseLock&) = delete;
+    BaseLock& operator=(BaseLock&&)      = delete;
 
     void lock() {
         // Record whether interrupts were enabled when entering.
@@ -108,16 +113,16 @@ class Spinlock<LockType::Irq> {
 };
 
 template <>
-class Spinlock<LockType::SpinlockIrq> {
+class BaseLock<LockType::SpinlockIrq> {
    public:
-    constexpr Spinlock() : internal_lock(), irq_lock() {}
+    constexpr BaseLock() : internal_lock(), irq_lock() {}
 
     // Spinlocks are non-copyable and non-movable to avoid accidental sharing.
-    Spinlock(const Spinlock&) = delete;
-    Spinlock(Spinlock&&)      = delete;
+    BaseLock(const BaseLock&) = delete;
+    BaseLock(BaseLock&&)      = delete;
 
-    Spinlock& operator=(const Spinlock&) = delete;
-    Spinlock& operator=(Spinlock&&)      = delete;
+    BaseLock& operator=(const BaseLock&) = delete;
+    BaseLock& operator=(BaseLock&&)      = delete;
 
     void lock() {
         this->irq_lock.lock();
@@ -144,8 +149,84 @@ class Spinlock<LockType::SpinlockIrq> {
     }
 
    private:
-    Spinlock<LockType::SpinlockSpin> internal_lock;
-    Spinlock<LockType::Irq> irq_lock;
+    BaseLock<LockType::SpinlockSpin> internal_lock;
+    BaseLock<LockType::Irq> irq_lock;
+};
+
+template <>
+class BaseLock<LockType::RwLock> {
+   public:
+    constexpr BaseLock() : writer_lock() {
+        this->readers.store(0, std::memory_order_acquire);
+    }
+
+    // Spinlocks are non-copyable and non-movable to avoid accidental sharing.
+    BaseLock(const BaseLock&) = delete;
+    BaseLock(BaseLock&&)      = delete;
+
+    BaseLock& operator=(const BaseLock&) = delete;
+    BaseLock& operator=(BaseLock&&)      = delete;
+
+    void acquire_read() {
+        while (true) {
+            if (this->try_acquire_read()) {
+                break;
+            }
+
+            arch::pause();
+        }
+    }
+
+    void release_read() {
+        this->readers.fetch_sub(1, std::memory_order_release);
+    }
+
+    void acquire_write() {
+        // Lock out other writers and future readers
+        this->writer_lock.lock();
+
+        // Wait for current readers to finish
+        while (this->readers.load(std::memory_order_acquire) != 0) {
+            arch::pause();
+        }
+    }
+
+    void release_write() {
+        this->writer_lock.unlock();
+    }
+
+    bool try_acquire_read() {
+        if (this->writer_lock.is_locked()) {
+            return false;
+        }
+
+        this->readers.fetch_add(1, std::memory_order_acquire);
+
+        if (this->writer_lock.is_locked()) {
+            this->readers.fetch_sub(1, std::memory_order_release);
+            return false;
+        }
+
+        return true;
+    }
+
+    bool try_acquire_write() {
+        if (!this->writer_lock.try_lock()) {
+            return false;
+        }
+
+        // We cannot wait for readers to finish.
+        if (this->readers.load(std::memory_order_acquire) != 0) {
+            this->writer_lock.unlock();
+            return false;
+        }
+
+        return true;
+    }
+
+   private:
+    BaseLock<LockType::SpinlockSpin> writer_lock;
+    std::atomic<size_t> readers{0};
 };
 
 struct DeferLock {
@@ -275,20 +356,235 @@ class LockGuard {
     }
 
    private:
-    /// Pointer to the managed mutex, or nullptr if none.
     MutexType* m_mutex;
-    /// Whether this guard currently owns (holds) the lock.
+    bool m_owns;
+};
+
+template <typename RwLock>
+class ReadGuard {
+   public:
+    using RwLockType = RwLock;
+
+    ReadGuard() noexcept : m_lock(nullptr), m_owns(false) {}
+
+    explicit ReadGuard(RwLockType& l) : m_lock(&l), m_owns(false) {
+        m_lock->acquire_read();
+        m_owns = true;
+    }
+
+    ReadGuard(RwLockType& l, DeferLock) noexcept : m_lock(&l), m_owns(false) {}
+
+    ReadGuard(RwLockType& l, TryToLock) : m_lock(&l), m_owns(l.try_acquire_read()) {}
+
+    ReadGuard(RwLockType& l, AdoptLock) noexcept : m_lock(&l), m_owns(true) {}
+
+    ReadGuard(ReadGuard&& other) noexcept : m_lock(other.m_lock), m_owns(other.m_owns) {
+        other.m_lock = nullptr;
+        other.m_owns = false;
+    }
+
+    ~ReadGuard() {
+        if (m_owns) {
+            m_lock->release_read();
+        }
+    }
+
+    ReadGuard(const ReadGuard&)            = delete;
+    ReadGuard& operator=(const ReadGuard&) = delete;
+
+    ReadGuard& operator=(ReadGuard&& other) noexcept {
+        if (this != &other) {
+            if (m_owns) {
+                m_lock->release_read();
+            }
+
+            m_lock       = other.m_lock;
+            m_owns       = other.m_owns;
+            other.m_lock = nullptr;
+            other.m_owns = false;
+        }
+        return *this;
+    }
+
+    void lock() {
+        if (!m_lock || m_owns) {
+            return;
+        }
+
+        m_lock->acquire_read();
+        m_owns = true;
+    }
+
+    bool try_lock() {
+        if (!m_lock || m_owns) {
+            return false;
+        }
+
+        m_owns = m_lock->try_acquire_read();
+        return m_owns;
+    }
+
+    void unlock() {
+        if (!m_owns) {
+            return;
+        }
+
+        m_lock->release_read();
+        m_owns = false;
+    }
+
+    RwLockType* release() noexcept {
+        RwLockType* released = m_lock;
+        m_lock               = nullptr;
+        m_owns               = false;
+        return released;
+    }
+
+    void swap(ReadGuard& other) noexcept {
+        std::swap(m_lock, other.m_lock);
+        std::swap(m_owns, other.m_owns);
+    }
+
+    bool owns_lock() const noexcept {
+        return m_owns;
+    }
+
+    explicit operator bool() const noexcept {
+        return m_owns;
+    }
+
+    RwLockType* mutex() const noexcept {
+        return m_lock;
+    }
+
+   private:
+    RwLockType* m_lock;
+    bool m_owns;
+};
+
+template <typename RwLock>
+class WriteGuard {
+   public:
+    using RwLockType = RwLock;
+
+    WriteGuard() noexcept : m_lock(nullptr), m_owns(false) {}
+
+    explicit WriteGuard(RwLockType& l) : m_lock(&l), m_owns(false) {
+        m_lock->acquire_write();
+        m_owns = true;
+    }
+
+    WriteGuard(RwLockType& l, DeferLock) noexcept : m_lock(&l), m_owns(false) {}
+
+    WriteGuard(RwLockType& l, TryToLock) : m_lock(&l), m_owns(l.try_acquire_write()) {}
+
+    WriteGuard(RwLockType& l, AdoptLock) noexcept : m_lock(&l), m_owns(true) {}
+
+    WriteGuard(WriteGuard&& other) noexcept : m_lock(other.m_lock), m_owns(other.m_owns) {
+        other.m_lock = nullptr;
+        other.m_owns = false;
+    }
+
+    ~WriteGuard() {
+        if (m_owns) {
+            m_lock->release_write();
+        }
+    }
+
+    WriteGuard(const WriteGuard&)            = delete;
+    WriteGuard& operator=(const WriteGuard&) = delete;
+
+    WriteGuard& operator=(WriteGuard&& other) noexcept {
+        if (this != &other) {
+            if (m_owns) {
+                m_lock->release_write();
+            }
+
+            m_lock       = other.m_lock;
+            m_owns       = other.m_owns;
+            other.m_lock = nullptr;
+            other.m_owns = false;
+        }
+        return *this;
+    }
+
+    void lock() {
+        if (!m_lock || m_owns) {
+            return;
+        }
+
+        m_lock->acquire_write();
+        m_owns = true;
+    }
+
+    bool try_lock() {
+        if (!m_lock || m_owns) {
+            return false;
+        }
+
+        m_owns = m_lock->try_acquire_write();
+        return m_owns;
+    }
+
+    void unlock() {
+        if (!m_owns) {
+            return;
+        }
+
+        m_lock->release_write();
+        m_owns = false;
+    }
+
+    RwLockType* release() noexcept {
+        RwLockType* released = m_lock;
+        m_lock               = nullptr;
+        m_owns               = false;
+        return released;
+    }
+
+    void swap(WriteGuard& other) noexcept {
+        std::swap(m_lock, other.m_lock);
+        std::swap(m_owns, other.m_owns);
+    }
+
+    bool owns_lock() const noexcept {
+        return m_owns;
+    }
+
+    explicit operator bool() const noexcept {
+        return m_owns;
+    }
+
+    RwLockType* mutex() const noexcept {
+        return m_lock;
+    }
+
+   private:
+    RwLockType* m_lock;
     bool m_owns;
 };
 
 template <class Mutex>
 LockGuard(Mutex&) -> LockGuard<Mutex>;
+
+template <class Mutex>
+ReadGuard(Mutex&) -> ReadGuard<Mutex>;
+
+template <class Mutex>
+WriteGuard(Mutex&) -> WriteGuard<Mutex>;
 }  // namespace __details
 
 template <class Mutex>
 using LockGuard = __details::LockGuard<Mutex>;
 
-using SpinLock      = __details::Spinlock<__details::LockType::SpinlockSpin>;
-using IrqLock       = __details::Spinlock<__details::LockType::SpinlockIrq>;
-using InterruptLock = __details::Spinlock<__details::LockType::Irq>;
+template <class Mutex>
+using ReadGuard = __details::ReadGuard<Mutex>;
+
+template <class Mutex>
+using WriteGuard = __details::WriteGuard<Mutex>;
+
+using SpinLock      = __details::BaseLock<__details::LockType::SpinlockSpin>;
+using IrqLock       = __details::BaseLock<__details::LockType::SpinlockIrq>;
+using InterruptLock = __details::BaseLock<__details::LockType::Irq>;
+using RWLock        = __details::BaseLock<__details::LockType::RwLock>;
 }  // namespace kernel

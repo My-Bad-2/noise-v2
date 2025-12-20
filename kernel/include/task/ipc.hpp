@@ -50,7 +50,7 @@ class PortManager {
     static PortManager& get();
 
    private:
-    SpinLock lock;
+    RWLock lock;
     Vector<PortEntry> table;
     Vector<uint32_t> free_indices;
 };

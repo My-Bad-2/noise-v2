@@ -98,7 +98,7 @@ void IPCPort::close() {
 }
 
 size_t PortManager::create_port() {
-    LockGuard guard(this->lock);
+    WriteGuard guard(this->lock);
 
     uint32_t index;
     IPCPort* new_port;
@@ -120,7 +120,7 @@ IPCPort* PortManager::get_port(size_t handle) {
     uint32_t index = handle & 0xFFFFFFFF;
     uint32_t gen   = handle >> 32;
 
-    LockGuard guard(this->lock);
+    ReadGuard guard(this->lock);
 
     if (index >= this->table.size()) {
         return nullptr;
@@ -142,7 +142,7 @@ void PortManager::destroy_port(size_t handle) {
     IPCPort* target = nullptr;
 
     {
-        LockGuard(this->lock);
+        WriteGuard(this->lock);
 
         if (index >= this->table.size()) {
             return;
@@ -172,7 +172,7 @@ bool PortManager::is_valid_port(size_t handle) {
     uint32_t index = handle & 0xFFFFFFFF;
     uint32_t gen   = handle >> 32;
 
-    LockGuard guard(this->lock);
+    ReadGuard guard(this->lock);
 
     if (index >= this->table.size()) {
         return false;
