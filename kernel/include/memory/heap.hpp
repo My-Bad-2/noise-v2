@@ -62,6 +62,21 @@ class HeapMap {
     static SpinLock lock;
 };
 
+struct HeapTLB {
+    static constexpr size_t TLB_SIZE = 64;
+    static constexpr size_t TLB_MASK = TLB_SIZE - 1;
+
+    struct Entry {
+        uintptr_t page_base;
+        Slab* slab;
+    } entries[TLB_SIZE];
+
+    void init();
+
+    Slab* lookup(void* ptr);
+    void insert(void* ptr, Slab* s);
+};
+
 class SlubAllocator {
    public:
     SlubAllocator();
@@ -128,6 +143,8 @@ class SlubAllocator {
     };
 
     struct alignas(CACHE_LINE_SIZE) CpuCache {
+        HeapTLB tlb;
+
         struct ClassCache {
             Slab* active;
             void* free_buf[FREE_BATCH_SIZE];

@@ -2,6 +2,7 @@
 #include "boot/boot.h"
 #include "hal/smp_manager.hpp"
 #include "libs/log.hpp"
+#include "memory/memory.hpp"
 #include "memory/vmm.hpp"
 #include "libs/math.hpp"
 #include <string.h>
@@ -120,6 +121,35 @@ Slab* HeapMap::get(void* ptr) {
     return reinterpret_cast<Slab*>(l1->entries[(addr >> 12) & MASK]);
 }
 
+void HeapTLB::init() {
+    memset(this->entries, 0, sizeof(this->entries));
+}
+
+Slab* HeapTLB::lookup(void* ptr) {
+    uintptr_t addr      = reinterpret_cast<uintptr_t>(ptr);
+    uintptr_t page_base = align_down(addr, PAGE_SIZE_4K);
+
+    // Use bits 12-18 of the address as mask
+    size_t idx = (page_base >> 12) & TLB_MASK;
+
+    if (this->entries[idx].page_base == page_base) {
+        // TLB Hit!
+        return this->entries[idx].slab;
+    }
+
+    return nullptr;
+}
+
+void HeapTLB::insert(void* ptr, Slab* s) {
+    uintptr_t addr      = reinterpret_cast<uintptr_t>(ptr);
+    uintptr_t page_base = align_down(addr, PAGE_SIZE_4K);
+
+    size_t idx = (page_base >> 12) & TLB_MASK;
+
+    this->entries[idx].page_base = page_base;
+    this->entries[idx].slab      = s;
+}
+
 SlubAllocator::SlubAllocator() {
     size_t s = 16;
 
@@ -186,11 +216,46 @@ void SlubAllocator::free(void* ptr) {
         return;
     }
 
-    Slab* s = HeapMap::get(ptr);
+    LockGuard guard(this->irq_lock);
+
+    uint32_t cpu_id = 0;
+
+    if (cpu::CpuCoreManager::get().initialized()) {
+        cpu_id = cpu::CpuCoreManager::get().get_current_core()->core_idx;
+    }
+
+    uintptr_t addr = reinterpret_cast<uintptr_t>(ptr);
+    auto& cache    = this->cpu_caches[cpu_id];
+
+    Slab* s = cache.tlb.lookup(ptr);
 
     if (!s) {
-        PANIC("Out of Memory");
-        return;
+        uintptr_t page_base = align_down(reinterpret_cast<uintptr_t>(ptr), PAGE_SIZE_4K);
+
+        // Check the 8 active slabs currently loaded in L1 cache
+        for (int i = 0; i < NUM_CLASSES; ++i) {
+            Slab* active = cache.classes[i].active;
+
+            if (active && (reinterpret_cast<uintptr_t>(active->page_addr) == page_base)) {
+                s = active;
+
+                // Update the TLB
+                cache.tlb.insert(ptr, s);
+                break;
+            }
+        }
+    }
+
+    if (!s) {
+        s = HeapMap::get(ptr);
+
+        if (!s) {
+            PANIC("Double Free or invalid pointer!");
+            return;
+        }
+
+        // Cache the result of this tree walk
+        cache.tlb.insert(ptr, s);
     }
 
     if (s->is_large) {
@@ -198,20 +263,13 @@ void SlubAllocator::free(void* ptr) {
         return;
     }
 
-    LockGuard guard(this->irq_lock);
-    uint32_t cpu_id = 0;
+    auto& class_cache = cache.classes[s->size_class];
 
-    if (cpu::CpuCoreManager::get().initialized()) {
-        cpu_id = cpu::CpuCoreManager::get().get_current_core()->core_idx;
-    }
-
-    auto& cache = this->cpu_caches[cpu_id].classes[s->size_class];
-
-    if (cache.free_count < FREE_BATCH_SIZE) {
-        cache.free_buf[cache.free_count++] = ptr;
+    if (class_cache.free_count < FREE_BATCH_SIZE) {
+        class_cache.free_buf[class_cache.free_count++] = ptr;
     } else {
-        this->flush(s->size_class, cache);
-        cache.free_buf[cache.free_count++] = ptr;
+        this->flush(s->size_class, class_cache);
+        class_cache.free_buf[class_cache.free_count++] = ptr;
     }
 }
 
