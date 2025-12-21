@@ -95,11 +95,14 @@ class SlubAllocator {
 
         if (size <= 16) {
             return 0;
-        } else {
-            // Log 2
-            return std::bit_width(size - 1) - 4;
         }
+
+        // Log 2
+        return std::bit_width(size - 1) - 4;
     }
+
+    void* alloc_large(size_t size);
+    void free_large(Slab* s, void* ptr);
 
     void* take_object(Slab* s);
     Slab* refill_slab(int idx);
@@ -129,9 +132,6 @@ class SlubAllocator {
         s->next = s->prev = nullptr;
     }
 
-    void* alloc_large(size_t size);
-    void free_large(Slab* s, void* ptr);
-
     // 16, 32, 64, 128, 256, 512, 1K, 2K
     static constexpr int NUM_CLASSES = 8;
 
@@ -152,6 +152,7 @@ class SlubAllocator {
         } classes[NUM_CLASSES];
     };
 
+    [[gnu::noinline]] void free_slow(void* ptr, CpuCache& cache);
     void flush(int idx, CpuCache::ClassCache& cache);
 
     SizeClass size_classes[NUM_CLASSES];

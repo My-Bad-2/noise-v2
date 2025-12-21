@@ -220,22 +220,7 @@ void* SlubAllocator::allocate(size_t size) {
     return nullptr;
 }
 
-void SlubAllocator::free(void* ptr) {
-    if (!ptr) {
-        return;
-    }
-
-    LockGuard guard(this->irq_lock);
-
-    uint32_t cpu_id = 0;
-
-    if (cpu::CpuCoreManager::get().initialized()) {
-        cpu_id = cpu::CpuCoreManager::get().get_current_core()->core_idx;
-    }
-
-    uintptr_t addr = reinterpret_cast<uintptr_t>(ptr);
-    auto& cache    = this->cpu_caches[cpu_id];
-
+void SlubAllocator::free_slow(void* ptr, CpuCache& cache) {
     Slab* s = cache.tlb.lookup(ptr);
 
     if (!s) {
@@ -253,33 +238,62 @@ void SlubAllocator::free(void* ptr) {
                 break;
             }
         }
-    }
 
-    if (!s) {
-        s = HeapMap::get(ptr);
-
+        // Check the radix tree
         if (!s) {
-            PANIC("Double Free or invalid pointer!");
-            return;
-        }
+            s = HeapMap::get(ptr);
 
-        // Cache the result of this tree walk
-        cache.tlb.insert(ptr, s);
+            if (unlikely(!s)) {
+                PANIC("Double free or invalid pointer!");
+                return;
+            }
+
+            cache.tlb.insert(ptr, s);
+        }
     }
 
-    if (s->is_large) {
+    if (unlikely(s->is_large)) {
         this->free_large(s, ptr);
         return;
     }
 
     auto& class_cache = cache.classes[s->size_class];
 
-    if (class_cache.free_count < FREE_BATCH_SIZE) {
-        class_cache.free_buf[class_cache.free_count++] = ptr;
-    } else {
+    if (unlikely(class_cache.free_count >= FREE_BATCH_SIZE)) {
         this->flush(s->size_class, class_cache);
-        class_cache.free_buf[class_cache.free_count++] = ptr;
     }
+
+    class_cache.free_buf[class_cache.free_count++] = ptr;
+}
+
+void SlubAllocator::free(void* ptr) {
+    if (unlikely(!ptr)) {
+        return;
+    }
+
+    LockGuard guard(this->irq_lock);
+
+    uint32_t cpu_id = 0;
+
+    if (cpu::CpuCoreManager::get().initialized()) {
+        cpu_id = cpu::CpuCoreManager::get().get_current_core()->core_idx;
+    }
+
+    auto& cache = this->cpu_caches[cpu_id];
+
+    Slab* s = cache.tlb.lookup(ptr);
+
+    if (likely(s)) {
+        auto& class_cache = cache.classes[s->size_class];
+
+        if (likely(class_cache.free_count < FREE_BATCH_SIZE)) {
+            class_cache.free_buf[class_cache.free_count++] = ptr;
+            return;
+        }
+    }
+
+    // Could be anything: TLB Miss, Buffer Full, Large Page
+    this->free_slow(ptr, cache);
 }
 
 void* SlubAllocator::take_object(Slab* s) {
