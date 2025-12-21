@@ -63,7 +63,7 @@ class CpuCoreManager {
     }
 
     bool initialized() const {
-        return !this->cores.empty();
+        return !this->cores.empty() && smp_active;
     }
 
    private:
@@ -77,5 +77,6 @@ class CpuCoreManager {
 
     Vector<PerCpuData*> cores;
     SpinLock lock;
+    bool smp_active;
 };
 }  // namespace kernel::cpu

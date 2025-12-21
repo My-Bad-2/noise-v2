@@ -1,40 +1,148 @@
 #pragma once
 
-#include <cstdint>
-#include <cstddef>
 #include "libs/spinlock.hpp"
+#include "memory/memory.hpp"
+#include <bit>
+
+// 48 bits total. 12 bits -> offset. 36 bits index
+// Similar to how x86_64's paging behaves.
+// Level 4: Bits 39-47
+// Level 3: Bits 30-38
+// Level 2: Bits 21-29
+// Level 1: Bits 12-20
+#define MASK            0x1ff
+#define FREE_BATCH_SIZE 32
 
 namespace kernel::memory {
-struct BlockHeader {
-    uint32_t magic;      ///< Magic tag to sanity-check blocks.
-    uint32_t is_free;    ///< Non-zero when block is on the free list.
-    size_t size;         ///< Usable payload size in bytes (after header).
-    size_t region_size;  ///< Underlying page size used for this region.
+struct alignas(32) Slab {
+    void* freelist;
+    Slab* next;
+    Slab* prev;
+    void* page_addr;
 
-    BlockHeader* next;       ///< Next block in physical address order.
-    BlockHeader* prev;       ///< Previous block in physical address order.
-    BlockHeader* next_free;  ///< Next block in free-list.
-    BlockHeader* prev_free;  ///< Previous block in free-list.
+    uint16_t in_use;
+    uint16_t total;
+    uint16_t size_class;
+    uint16_t is_large;
 };
 
-class KernelHeap {
+class MetadataAllocator {
    public:
-    void* alloc(size_t size);
-    void free(void* ptr);
+    Slab* alloc();
+    void free(Slab* s);
+
+    static MetadataAllocator& get();
 
    private:
-    static size_t align(size_t n);
+    struct Page {
+        Page* next;
+        uint8_t data[memory::PAGE_SIZE_4K - sizeof(Page*)];
+    };
 
-    void insert_free_node(BlockHeader* block);
-    void remove_free_node(BlockHeader* block);
-
-    bool expand_heap(size_t size_needed);
-
-    void coalesce(BlockHeader* block);
-    void try_free_region(BlockHeader* block);
-
+    Page* head      = nullptr;
+    size_t offset   = 0;
+    Slab* free_pool = nullptr;
     SpinLock lock;
-    BlockHeader* free_list_head = nullptr;
+};
+
+// Inspiration: Radix maps used by x86_64 architecture for mapping
+// Virtual Address Space to Physical Address Space.
+class HeapMap {
+   public:
+    static void set(void* ptr, Slab* meta);
+    static Slab* get(void* ptr);
+
+    struct Node {
+        // Can be Node* (Levels 4-2)
+        void* entries[MASK + 1];
+    };
+
+   private:
+    static Node* root;
+    static SpinLock lock;
+};
+
+class SlubAllocator {
+   public:
+    SlubAllocator();
+
+    void init();
+    void* allocate(size_t size);
+    void free(void* ptr);
+
+    static SlubAllocator& get();
+
+   private:
+    inline int get_size_idx(size_t size) const {
+        if (size > 2048) {
+            return -1;
+        }
+
+        if (size <= 16) {
+            return 0;
+        } else {
+            // Log 2
+            return std::bit_width(size - 1) - 4;
+        }
+    }
+
+    void* take_object(Slab* s);
+    Slab* refill_slab(int idx);
+
+    static inline void list_add(Slab*& head, Slab* s) {
+        s->next = head;
+        s->prev = nullptr;
+
+        if (head) {
+            head->prev = s;
+        }
+
+        head = s;
+    }
+
+    static inline void list_remove(Slab*& head, Slab* s) {
+        if (s->prev) {
+            s->prev->next = s->next;
+        } else {
+            head = s->next;
+        }
+
+        if (s->next) {
+            s->next->prev = s->prev;
+        }
+
+        s->next = s->prev = nullptr;
+    }
+
+    void* alloc_large(size_t size);
+    void free_large(Slab* s, void* ptr);
+
+    // 16, 32, 64, 128, 256, 512, 1K, 2K
+    static constexpr int NUM_CLASSES = 8;
+
+    struct SizeClass {
+        size_t size;
+        Slab* partial;
+        Slab* empty;
+        SpinLock lock;
+    };
+
+    struct alignas(CACHE_LINE_SIZE) CpuCache {
+        struct ClassCache {
+            Slab* active;
+            void* free_buf[FREE_BATCH_SIZE];
+            int free_count;
+        } classes[NUM_CLASSES];
+    };
+
+    void flush(int idx, CpuCache::ClassCache& cache);
+
+    SizeClass size_classes[NUM_CLASSES];
+    CpuCache* cpu_caches = nullptr;
+    size_t num_cpus      = 0;
+    bool initialized     = false;
+
+    InterruptLock irq_lock;
 };
 
 void* kmalloc(size_t size);

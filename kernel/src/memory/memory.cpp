@@ -2,6 +2,7 @@
 #include "memory/memory.hpp"
 #include "memory/pmm.hpp"
 #include "memory/vmm.hpp"
+#include "memory/heap.hpp"
 
 namespace kernel::memory {
 namespace __details {
@@ -13,5 +14,6 @@ void init() {
 
     PhysicalManager::init();
     VirtualManager::init();
+    SlubAllocator::get().init();
 }
 }  // namespace kernel::memory

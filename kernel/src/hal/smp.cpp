@@ -77,6 +77,8 @@ void CpuCoreManager::init(void* bsp_stack_top) {
         this->cores.push_back(data);
     }
 
+    LOG_DEBUG("Here");
+
     for (size_t i = 0; i < this->cores.size(); ++i) {
         PerCpuData* core     = this->cores[i];
         limine_mp_info* info = mp_request.response->cpus[i];
@@ -102,6 +104,8 @@ void CpuCoreManager::init(void* bsp_stack_top) {
             kernel::arch::pause();
         }
     }
+
+    this->smp_active = true;
 
     // Uncomment these while testing any changes in scheduler
     // auto t1 = new task::Thread(task::Process::kernel_proc, worker, (void*)"A", cores[0]);

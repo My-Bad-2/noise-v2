@@ -1,273 +1,349 @@
-#include "libs/log.hpp"
-#include "memory/memory.hpp"
-#include "memory/vmm.hpp"
 #include "memory/heap.hpp"
+#include "boot/boot.h"
+#include "hal/smp_manager.hpp"
+#include "libs/log.hpp"
+#include "memory/vmm.hpp"
 #include "libs/math.hpp"
-
-#define BLOCK_MAGIC 0xC0FFEE
-
-#define likely(x)   __builtin_expect(!!(x), 1)
-#define unlikely(x) __builtin_expect(!!(x), 0)
+#include <string.h>
 
 namespace kernel::memory {
-namespace {
-KernelHeap kheap;
-}
+HeapMap::Node* HeapMap::root = nullptr;
+SpinLock HeapMap::lock;
 
-size_t KernelHeap::align(size_t n) {
-    return align_up(n, 0x10u);
-}
+Slab* MetadataAllocator::alloc() {
+    LockGuard guard(this->lock);
 
-void KernelHeap::insert_free_node(BlockHeader* block) {
-    // Free-list is a simple doubly-linked list with head insertion; this
-    // keeps insertion O(1) and keeps recently-freed blocks hot.
-    block->next_free = this->free_list_head;
-    block->prev_free = nullptr;
+    // If we have a free slab available, use it
+    if (this->free_pool) {
+        Slab* s         = this->free_pool;
+        this->free_pool = s->next;
 
-    if (this->free_list_head) {
-        this->free_list_head->prev_free = block;
+        return new (s) Slab();
     }
 
-    this->free_list_head = block;
-}
+    if (!this->head || (offset + sizeof(Slab) > sizeof(Page::data))) {
+        // need a new page
+        void* ptr = VirtualManager::allocate(1);
 
-void KernelHeap::remove_free_node(BlockHeader* block) {
-    if (block->prev_free) {
-        block->prev_free->next_free = block->next_free;
-    } else {
-        this->free_list_head = block->next_free;
-    }
-
-    if (block->next_free) {
-        block->next_free->prev_free = block->prev_free;
-    }
-
-    block->next_free = nullptr;
-    block->prev_free = nullptr;
-}
-
-bool KernelHeap::expand_heap(size_t size_needed) {
-    // Expansion policy: bias toward larger pages to reduce page-table
-    // pressure, but fall back to 4 KiB pages if necessary.
-    size_t overhead  = sizeof(BlockHeader);
-    size_t total_req = size_needed + overhead;
-
-    size_t count = 0;
-    PageSize size;
-
-    if (total_req >= PAGE_SIZE_1G) {
-        count = div_roundup(total_req, PAGE_SIZE_1G);
-        size  = PageSize::Size1G;
-    } else if (total_req >= PAGE_SIZE_2M) {
-        count = div_roundup(total_req, PAGE_SIZE_2M);
-        size  = PageSize::Size2M;
-    } else {
-        // Default to expanding by 2 MiB even for smaller requests to keep
-        // the number of heap regions low and amortize region overhead.
-        count = 1;
-        size  = PageSize::Size2M;
-    }
-
-    size_t alloc_bytes = count * static_cast<size_t>(size);
-
-    void* region_start = VirtualManager::allocate(count, size);
-
-    if (!region_start) {
-        // Fallback: if large pages fail (e.g. fragmentation), try 4 KiB
-        // pages instead of immediately giving up.
-        if (size > PageSize::Size4K) {
-            size         = PageSize::Size4K;
-            count        = div_roundup(total_req, PAGE_SIZE_4K);
-            alloc_bytes  = count * static_cast<size_t>(size);
-            region_start = VirtualManager::allocate(count, size);
-            if (!region_start) {
-                LOG_ERROR("KernelHeap: expand_heap failed (size_needed=%zu)", size_needed);
-                return false;
-            }
-        } else {
-            LOG_ERROR("KernelHeap: expand_heap failed (size_needed=%zu)", size_needed);
-            return false;
-        }
-    }
-
-    BlockHeader* new_block = reinterpret_cast<BlockHeader*>(region_start);
-    new_block->magic       = BLOCK_MAGIC;
-    new_block->size        = alloc_bytes - overhead;
-    new_block->is_free     = true;
-
-    new_block->region_size = static_cast<size_t>(size);
-
-    new_block->next = nullptr;
-    new_block->prev = nullptr;
-
-    this->insert_free_node(new_block);
-
-    LOG_INFO("KernelHeap: expanded heap by %zu bytes (page_size=%zu, count=%zu)", alloc_bytes,
-             static_cast<size_t>(size), count);
-    return true;
-}
-
-void KernelHeap::coalesce(BlockHeader* block) {
-    // Coalesce forward into the next block when it is free: this helps
-    // rebuild large contiguous chunks for future big allocations.
-    if (block->next && block->next->is_free) {
-        BlockHeader* next_block = block->next;
-        this->remove_free_node(next_block);
-
-        block->size += sizeof(BlockHeader) + next_block->size;
-        block->next = next_block->next;
-
-        if (block->next) {
-            block->next->prev = block;
-        }
-    }
-
-    // Coalesce backward into the previous block when it is free: this
-    // keeps physical-order list compact and improves region-release odds.
-    if (block->prev && block->prev->is_free) {
-        BlockHeader* prev_block = block->prev;
-        this->remove_free_node(block);
-
-        prev_block->size += sizeof(BlockHeader) + block->size;
-        prev_block->next = block->next;
-
-        if (block->next) {
-            block->next->prev = prev_block;
+        if (!ptr) {
+            return nullptr;
         }
 
-        block = prev_block;
+        Page* pg     = reinterpret_cast<Page*>(ptr);
+        pg->next     = this->head;
+        this->head   = pg;
+        this->offset = 0;
     }
 
-    this->try_free_region(block);
+    Slab* s = reinterpret_cast<Slab*>(&this->head->data[offset]);
+    this->offset += sizeof(Slab);
+    return new (s) Slab();
 }
 
-void KernelHeap::try_free_region(BlockHeader* block) {
-    // Policy: if a single free block spans an entire region (no
-    // neighbors), we prefer to return it to the VMM. This keeps heap
-    // footprint proportional to real usage.
-    if (block->is_free && block->prev == nullptr && block->next == nullptr) {
-        size_t total_size = block->size + sizeof(BlockHeader);
-
-        this->remove_free_node(block);
-        VirtualManager::free(reinterpret_cast<void*>(block), total_size);
-
-        LOG_INFO("KernelHeap: released region back to VMM (size=%zu)", total_size);
-    }
+void MetadataAllocator::free(Slab* s) {
+    LockGuard guard(this->lock);
+    s->next         = this->free_pool;
+    this->free_pool = s;
 }
 
-void* KernelHeap::alloc(size_t size) {
-    if (size == 0) {
-        return nullptr;
-    }
+MetadataAllocator& MetadataAllocator::get() {
+    static MetadataAllocator allocator;
+    return allocator;
+}
 
-    size = align(size);
-
+void HeapMap::set(void* ptr, Slab* meta) {
     LockGuard guard(lock);
+    uintptr_t addr = reinterpret_cast<uintptr_t>(ptr);
 
-    // Best-fit search over the free-list. This minimizes leftover
-    // fragment sizes at the cost of a linear scan.
-    BlockHeader* best_fit = nullptr;
-    BlockHeader* curr     = this->free_list_head;
-
-    while (curr) {
-        if (curr->size >= size) {
-            if (!best_fit || curr->size < best_fit->size) {
-                best_fit = curr;
-            }
-
-            if (curr->size == size) {
-                break;
-            }
+    if (!root) {
+        root = reinterpret_cast<Node*>(VirtualManager::allocate(1));
+        if (!root) {
+            PANIC("Out of Memory!");
         }
-
-        curr = curr->next_free;
     }
 
-    if (!best_fit) {
-        // No suitable block; grow the heap and retry. We explicitly drop
-        // the lock before recursive call to avoid deadlock.
-        if (expand_heap(size)) {
-            this->lock.unlock();
-            return this->alloc(size);
-        }
+    Node* l4 = root;
 
-        LOG_ERROR("KernelHeap: alloc failed size=%zu (no block, cannot expand)", size);
+    // Level 4 -> Level 3
+    uintptr_t i4 = (addr >> 39) & MASK;
+    if (!l4->entries[i4]) {
+        l4->entries[i4] = VirtualManager::allocate(1);
+    }
+
+    Node* l3 = reinterpret_cast<Node*>(l4->entries[i4]);
+
+    // Level 3 -> Level 2
+    uintptr_t i3 = (addr >> 30) & MASK;
+    if (!l3->entries[i3]) {
+        l3->entries[i3] = VirtualManager::allocate(1);
+    }
+
+    Node* l2 = reinterpret_cast<Node*>(l3->entries[i3]);
+
+    // Level 2 -> Level 1
+    uintptr_t i2 = (addr >> 21) & MASK;
+    if (!l2->entries[i2]) {
+        l2->entries[i2] = VirtualManager::allocate(1);
+    }
+
+    Node* l1        = reinterpret_cast<Node*>(l2->entries[i2]);
+    uintptr_t i1    = (addr >> 12) & MASK;
+    l1->entries[i1] = reinterpret_cast<void*>(meta);
+}
+
+Slab* HeapMap::get(void* ptr) {
+    uintptr_t addr = reinterpret_cast<uintptr_t>(ptr);
+
+    if (!root) {
         return nullptr;
     }
 
-    this->remove_free_node(best_fit);
-    best_fit->is_free = 0;
+    Node* l4 = root;
+    Node* l3 = reinterpret_cast<Node*>(l4->entries[(addr >> 39) & MASK]);
 
-    // If the block is significantly larger than requested, split it into
-    // an allocated part and a new free block. The "+ 0x10" ensures that
-    // the remainder is big enough to be useful (beyond header + min obj).
-    if (best_fit->size > size + sizeof(BlockHeader) + 0x10) {
-        BlockHeader* new_block = reinterpret_cast<BlockHeader*>(reinterpret_cast<char*>(best_fit) +
-                                                                sizeof(BlockHeader) + size);
-
-        new_block->magic       = BLOCK_MAGIC;
-        new_block->is_free     = true;
-        new_block->size        = best_fit->size - size - sizeof(BlockHeader);
-        new_block->region_size = best_fit->region_size;
-
-        new_block->next = best_fit->next;
-        new_block->prev = best_fit;
-
-        if (best_fit->next) {
-            best_fit->next->prev = new_block;
-        }
-
-        best_fit->next = new_block;
-        best_fit->size = size;
-
-        this->insert_free_node(new_block);
+    if (!l3) {
+        return nullptr;
     }
 
-    void* user_ptr =
-        reinterpret_cast<void*>(reinterpret_cast<char*>(best_fit) + sizeof(BlockHeader));
+    Node* l2 = reinterpret_cast<Node*>(l3->entries[(addr >> 30) & MASK]);
 
-    // LOG_DEBUG("KernelHeap: alloc size=%zu -> %p (block_size=%zu)", size, user_ptr,
-    // best_fit->size);
-    return user_ptr;
+    if (!l2) {
+        return nullptr;
+    }
+
+    Node* l1 = reinterpret_cast<Node*>(l2->entries[(addr >> 21) & MASK]);
+
+    if (!l1) {
+        return nullptr;
+    }
+
+    return reinterpret_cast<Slab*>(l1->entries[(addr >> 12) & MASK]);
 }
 
-void KernelHeap::free(void* ptr) {
+SlubAllocator::SlubAllocator() {
+    size_t s = 16;
+
+    for (int i = 0; i < NUM_CLASSES; ++i) {
+        this->size_classes[i].size    = s;
+        this->size_classes[i].partial = nullptr;
+        this->size_classes[i].empty   = nullptr;
+
+        s *= 2;
+    }
+}
+
+void SlubAllocator::init() {
+    if (this->initialized) {
+        return;
+    }
+
+    this->num_cpus   = mp_request.response->cpu_count;
+    size_t bytes     = sizeof(CpuCache) * this->num_cpus;
+    size_t pages     = div_roundup(bytes, PAGE_SIZE_4K);
+    this->cpu_caches = reinterpret_cast<CpuCache*>(VirtualManager::allocate(pages));
+
+    memset(this->cpu_caches, 0, pages * PAGE_SIZE_4K);
+
+    this->initialized = true;
+}
+
+void* SlubAllocator::allocate(size_t size) {
+    if (!this->initialized) {
+        return nullptr;
+    }
+
+    int idx = this->get_size_idx(size);
+    if (idx == -1) {
+        return this->alloc_large(size);
+    }
+
+    LockGuard guard(this->irq_lock);
+
+    uint32_t cpu_id = 0;
+
+    if (cpu::CpuCoreManager::get().initialized()) {
+        cpu_id = cpu::CpuCoreManager::get().get_current_core()->core_idx;
+    }
+
+    auto& cache = this->cpu_caches[cpu_id].classes[idx];
+
+    if (cache.active && cache.active->freelist) {
+        return this->take_object(cache.active);
+    }
+
+    Slab* new_slab = this->refill_slab(idx);
+
+    if (new_slab) {
+        cache.active = new_slab;
+        return this->take_object(new_slab);
+    }
+
+    return nullptr;
+}
+
+void SlubAllocator::free(void* ptr) {
     if (!ptr) {
         return;
     }
 
-    LockGuard guard(lock);
+    Slab* s = HeapMap::get(ptr);
 
-    BlockHeader* header =
-        reinterpret_cast<BlockHeader*>(reinterpret_cast<char*>(ptr) - sizeof(BlockHeader));
-
-    // Basic sanity check: if the magic doesn't match, we ignore the
-    // free. This avoids crashing on double-frees or foreign pointers
-    // but also hides bugs.
-    if (unlikely(header->magic != BLOCK_MAGIC)) {
-        LOG_ERROR("KernelHeap: free called with invalid block header %p", header);
+    if (!s) {
+        PANIC("Out of Memory");
         return;
     }
 
-    if (header->is_free) {
-        LOG_WARN("KernelHeap: double free detected for %p", ptr);
+    if (s->is_large) {
+        this->free_large(s, ptr);
         return;
     }
 
-    header->is_free = true;
-    this->insert_free_node(header);
+    LockGuard guard(this->irq_lock);
+    uint32_t cpu_id = 0;
 
-    // LOG_DEBUG("KernelHeap: free %p (size=%zu)", ptr, header->size);
+    if (cpu::CpuCoreManager::get().initialized()) {
+        cpu_id = cpu::CpuCoreManager::get().get_current_core()->core_idx;
+    }
 
-    this->coalesce(header);
+    auto& cache = this->cpu_caches[cpu_id].classes[s->size_class];
+
+    if (cache.free_count < FREE_BATCH_SIZE) {
+        cache.free_buf[cache.free_count++] = ptr;
+    } else {
+        this->flush(s->size_class, cache);
+        cache.free_buf[cache.free_count++] = ptr;
+    }
+}
+
+void* SlubAllocator::take_object(Slab* s) {
+    void* obj = s->freelist;
+    // Read embedded next pointer
+    s->freelist = *reinterpret_cast<void**>(obj);
+    s->in_use++;
+    return obj;
+}
+
+Slab* SlubAllocator::refill_slab(int idx) {
+    SizeClass& sc = this->size_classes[idx];
+    LockGuard guard(sc.lock);
+
+    if (sc.partial) {
+        Slab* s = sc.partial;
+        this->list_remove(sc.partial, s);
+        s->next = s->prev = nullptr;
+        return s;
+    }
+
+    if (sc.empty) {
+        Slab* s = sc.empty;
+        this->list_remove(sc.empty, s);
+        return s;
+    }
+
+    void* page = VirtualManager::allocate(1);
+
+    if (!page) {
+        return nullptr;
+    }
+
+    Slab* s = MetadataAllocator::get().alloc();
+
+    if (!s) {
+        VirtualManager::free(page, 1);
+        return nullptr;
+    }
+
+    s->page_addr  = page;
+    s->size_class = static_cast<uint16_t>(idx);
+    s->total      = PAGE_SIZE_4K / sc.size;
+    s->in_use     = 0;
+    s->is_large   = 0;
+
+    char* base = reinterpret_cast<char*>(page);
+
+    // Thread the free list
+    for (size_t i = 0; i < s->total - 1; ++i) {
+        *reinterpret_cast<void**>(base + i * sc.size) = (base + (i + 1) * sc.size);
+    }
+
+    *reinterpret_cast<void**>(base + (s->total - 1) * sc.size) = nullptr;
+    s->freelist                                                = base;
+
+    HeapMap::set(page, s);
+    return s;
+}
+
+void SlubAllocator::flush(int idx, CpuCache::ClassCache& cache) {
+    SizeClass& sc = this->size_classes[idx];
+    LockGuard guard(sc.lock);
+
+    // Process all pointers in the batch
+    for (int i = 0; i < cache.free_count; ++i) {
+        void* ptr = cache.free_buf[i];
+        Slab* s   = HeapMap::get(ptr);
+
+        // Return to freelist
+        *reinterpret_cast<void**>(ptr) = s->freelist;
+        s->freelist                    = ptr;
+        s->in_use--;
+
+        if (s->in_use == s->total - 1) {
+            // Transition: Full -> Partial
+            this->list_add(sc.partial, s);
+        } else if (s->in_use == 0) {
+            // Transition: Partial -> Empty
+            this->list_remove(sc.partial, s);
+            this->list_add(sc.empty, s);
+        }
+        // If it remains partial -> do nothing
+    }
+
+    cache.free_count = 0;
+}
+
+void* SlubAllocator::alloc_large(size_t size) {
+    size_t pages = div_roundup(size, PAGE_SIZE_4K);
+    void* ptr    = VirtualManager::allocate(pages);
+
+    if (!ptr) {
+        return nullptr;
+    }
+
+    Slab* s = MetadataAllocator::get().alloc();
+
+    if (!s) {
+        VirtualManager::free(ptr, pages);
+        return nullptr;
+    }
+
+    s->page_addr = ptr;
+    s->is_large  = 1;
+    s->in_use    = static_cast<uint16_t>(pages);
+
+    HeapMap::set(ptr, s);
+    return ptr;
+}
+
+void SlubAllocator::free_large(Slab* s, void* ptr) {
+    size_t pages = s->in_use;
+    HeapMap::set(ptr, nullptr);
+    VirtualManager::free(ptr, pages);
+    MetadataAllocator::get().free(s);
+}
+
+SlubAllocator& SlubAllocator::get() {
+    static SlubAllocator allocator;
+    return allocator;
 }
 
 void kfree(void* ptr) {
-    kheap.free(ptr);
+    SlubAllocator& slub = SlubAllocator::get();
+    slub.free(ptr);
 }
 
 void* kmalloc(size_t size) {
-    return kheap.alloc(size);
+    SlubAllocator& slub = SlubAllocator::get();
+    return slub.allocate(size);
 }
 
 void* aligned_kalloc(size_t size, size_t alignment) {
@@ -281,7 +357,8 @@ void* aligned_kalloc(size_t size, size_t alignment) {
         return nullptr;
     }
 
-    void* raw_ptr = kheap.alloc(size + overhead);
+    SlubAllocator& slub = SlubAllocator::get();
+    void* raw_ptr       = slub.allocate(size + overhead);
     if (!raw_ptr) {
         return nullptr;
     }
@@ -300,10 +377,12 @@ void aligned_kfree(void* ptr) {
         return;
     }
 
+    SlubAllocator& slub = SlubAllocator::get();
+
     uintptr_t addr        = reinterpret_cast<uintptr_t>(ptr);
     void** stash_location = reinterpret_cast<void**>(addr - sizeof(void*));
     void* raw_ptr         = *stash_location;
 
-    kheap.free(raw_ptr);
+    slub.free(raw_ptr);
 }
 }  // namespace kernel::memory
