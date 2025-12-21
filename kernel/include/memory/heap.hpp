@@ -54,11 +54,11 @@ class HeapMap {
 
     struct Node {
         // Can be Node* (Levels 4-2)
-        void* entries[MASK + 1];
+        std::atomic<void*> entries[MASK + 1];
     };
 
    private:
-    static Node* root;
+    static std::atomic<Node*> root;
     static SpinLock lock;
 };
 

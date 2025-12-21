@@ -6,9 +6,10 @@
 #include "memory/vmm.hpp"
 #include "libs/math.hpp"
 #include <string.h>
+#include <atomic>
 
 namespace kernel::memory {
-HeapMap::Node* HeapMap::root = nullptr;
+std::atomic<HeapMap::Node*> HeapMap::root = nullptr;
 SpinLock HeapMap::lock;
 
 Slab* MetadataAllocator::alloc() {
@@ -56,69 +57,77 @@ void HeapMap::set(void* ptr, Slab* meta) {
     LockGuard guard(lock);
     uintptr_t addr = reinterpret_cast<uintptr_t>(ptr);
 
-    if (!root) {
-        root = reinterpret_cast<Node*>(VirtualManager::allocate(1));
-        if (!root) {
-            PANIC("Out of Memory!");
-        }
-    }
+    Node* l4 = root.load(std::memory_order_relaxed);
 
-    Node* l4 = root;
+    if (!l4) {
+        l4 = reinterpret_cast<Node*>(VirtualManager::allocate(1));
+        memset(l4, 0, PAGE_SIZE_4K);
+
+        root.store(l4, std::memory_order_release);
+    }
 
     // Level 4 -> Level 3
     uintptr_t i4 = (addr >> 39) & MASK;
-    if (!l4->entries[i4]) {
-        l4->entries[i4] = VirtualManager::allocate(1);
-    }
+    Node* l3     = static_cast<Node*>(l4->entries[i4].load(std::memory_order_relaxed));
+    if (!l3) {
+        l3 = reinterpret_cast<Node*>(VirtualManager::allocate(1));
+        memset(l3, 0, PAGE_SIZE_4K);
 
-    Node* l3 = reinterpret_cast<Node*>(l4->entries[i4]);
+        l4->entries[i4].store(l3, std::memory_order_release);
+    }
 
     // Level 3 -> Level 2
     uintptr_t i3 = (addr >> 30) & MASK;
-    if (!l3->entries[i3]) {
-        l3->entries[i3] = VirtualManager::allocate(1);
-    }
+    Node* l2     = static_cast<Node*>(l3->entries[i3].load(std::memory_order_relaxed));
+    if (!l2) {
+        l2 = reinterpret_cast<Node*>(VirtualManager::allocate(1));
+        memset(l2, 0, PAGE_SIZE_4K);
 
-    Node* l2 = reinterpret_cast<Node*>(l3->entries[i3]);
+        l3->entries[i3].store(l2, std::memory_order_release);
+    }
 
     // Level 2 -> Level 1
     uintptr_t i2 = (addr >> 21) & MASK;
-    if (!l2->entries[i2]) {
-        l2->entries[i2] = VirtualManager::allocate(1);
+    Node* l1     = static_cast<Node*>(l2->entries[i2].load(std::memory_order_relaxed));
+    if (!l1) {
+        l1 = reinterpret_cast<Node*>(VirtualManager::allocate(1));
+        memset(l1, 0, PAGE_SIZE_4K);
+
+        l2->entries[i2].store(l1, std::memory_order_release);
     }
 
-    Node* l1        = reinterpret_cast<Node*>(l2->entries[i2]);
-    uintptr_t i1    = (addr >> 12) & MASK;
-    l1->entries[i1] = reinterpret_cast<void*>(meta);
+    uintptr_t i1 = (addr >> 12) & MASK;
+    l1->entries[i1].store(meta, std::memory_order_release);
 }
 
 Slab* HeapMap::get(void* ptr) {
     uintptr_t addr = reinterpret_cast<uintptr_t>(ptr);
 
-    if (!root) {
+    Node* l4 = root.load(std::memory_order_acquire);
+    if (!l4) {
         return nullptr;
     }
 
-    Node* l4 = root;
-    Node* l3 = reinterpret_cast<Node*>(l4->entries[(addr >> 39) & MASK]);
-
+    uintptr_t i4 = (addr >> 39) & MASK;
+    Node* l3     = static_cast<Node*>(l4->entries[i4].load(std::memory_order_acquire));
     if (!l3) {
         return nullptr;
     }
 
-    Node* l2 = reinterpret_cast<Node*>(l3->entries[(addr >> 30) & MASK]);
-
+    uintptr_t i3 = (addr >> 30) & MASK;
+    Node* l2     = static_cast<Node*>(l3->entries[i3].load(std::memory_order_acquire));
     if (!l2) {
         return nullptr;
     }
 
-    Node* l1 = reinterpret_cast<Node*>(l2->entries[(addr >> 21) & MASK]);
-
+    uintptr_t i2 = (addr >> 21) & MASK;
+    Node* l1     = static_cast<Node*>(l2->entries[i2].load(std::memory_order_acquire));
     if (!l1) {
         return nullptr;
     }
 
-    return reinterpret_cast<Slab*>(l1->entries[(addr >> 12) & MASK]);
+    uintptr_t i1 = (addr >> 12) & MASK;
+    return static_cast<Slab*>(l1->entries[i1].load(std::memory_order_acquire));
 }
 
 void HeapTLB::init() {
