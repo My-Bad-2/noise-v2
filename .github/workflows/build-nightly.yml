@@ -39,7 +39,7 @@ jobs:
             - name: Generate Release Notes
               run: |
                   ISO_HASH=$(sha256sum release_dist/noise.iso | cut -d ' ' -f 1)
-                  CHANGELOG=$(git log -n 5 --pretty=format:"- %h - %s (%an)")
+                  CHANGELOG=$(git log -n 5 --pretty=format:"- %h - %s")
                   cat <<EOF > release_notes.md
                   ## Nightly Build - ${{ env.DATE }}
 
@@ -60,11 +60,6 @@ jobs:
 
                   ### Recent Changes
                   $CHANGELOG
-
-                  ### How to Run (QEMU)
-                  \`\`\`bash
-                  qemu-system-x86_64 -cdrom noise.iso -m 512M -serial stdio
-                  \`\`\`
                   EOF
 
             - name: Create Nightly Release
