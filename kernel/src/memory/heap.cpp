@@ -344,10 +344,29 @@ void SlubAllocator::flush(int idx, CpuCache::ClassCache& cache) {
     SizeClass& sc = this->size_classes[idx];
     LockGuard guard(sc.lock);
 
+    Slab* last_slab          = nullptr;
+    uintptr_t last_page_base = 0;
+
     // Process all pointers in the batch
     for (int i = 0; i < cache.free_count; ++i) {
         void* ptr = cache.free_buf[i];
-        Slab* s   = HeapMap::get(ptr);
+
+        if ((i + 1) < cache.free_count) {
+            // 0 -> Read
+            // 3 - > High temporal locality
+            __builtin_prefetch(cache.free_buf[i + 1], 0, 3);
+        }
+
+        Slab* s;
+        uintptr_t curr_page_base = align_down(reinterpret_cast<uintptr_t>(ptr), PAGE_SIZE_4K);
+
+        if (curr_page_base == last_page_base) {
+            s = last_slab;
+        } else {
+            s              = HeapMap::get(ptr);
+            last_slab      = s;
+            last_page_base = curr_page_base;
+        }
 
         // Return to freelist
         *reinterpret_cast<void**>(ptr) = s->freelist;
