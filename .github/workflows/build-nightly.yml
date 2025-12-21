@@ -36,17 +36,43 @@ jobs:
               run: |
                   mkdir release_dist
                   cp build/x86_64-clang-release/noise.iso release_dist/
-                  
-            # 2. UPDATED STEP: Use the env.DATE variable for Name and Tag
+            - name: Generate Release Notes
+              run: |
+                  ISO_HASH=$(sha256sum release_dist/noise.iso | cut -d ' ' -f 1)
+                  CHANGELOG=$(git log -n 5 --pretty=format:"- %h - %s (%an)")
+                  cat <<EOF > release_notes.md
+                  ## Nightly Build - ${{ env.DATE }}
+
+                  > **Development Snapshot**: This build is automatically generated from the latest source code. It may contain bugs or incomplete features.
+
+                  ### Build Information
+                  | Detail | Value |
+                  | :--- | :--- |
+                  | **Commit** | [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }}) |
+                  | **Branch** | ${{ github.ref_name }} |
+                  | **Built At** | $(date -u +'%Y-%m-%d %H:%M:%S UTC') |
+
+                  ### Verification (SHA256)
+                  Use this hash to verify the integrity of \`noise.iso\`:
+                  \`\`\`
+                  $ISO_HASH
+                  \`\`\`
+
+                  ### Recent Changes
+                  $CHANGELOG
+
+                  ### How to Run (QEMU)
+                  \`\`\`bash
+                  qemu-system-x86_64 -cdrom noise.iso -m 512M -serial stdio
+                  \`\`\`
+                  EOF
+
             - name: Create Nightly Release
               uses: softprops/action-gh-release@v1
               with:
                   name: Nightly Build - ${{ env.DATE }}
                   tag_name: nightly-${{ env.DATE }}
-                  body: |
-                      Automated nightly build.
-                      **Date:** ${{ env.DATE }}
-                      **Commit:** ${{ github.sha }}
+                  body_path: release_notes.md
                   files: |
                       release_dist/*
                   prerelease: true
