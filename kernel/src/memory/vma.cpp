@@ -229,6 +229,18 @@ VmRegion* VirtualMemoryAllocator::find_node(uintptr_t start) {
 }
 
 uintptr_t VirtualMemoryAllocator::find_hole(size_t size, size_t alignment) {
+    if (this->cached_cursor) {
+        // Calculate where the allocation would start if placed after the cursor
+        uintptr_t candidate = align_up(this->cached_cursor->end(), alignment);
+        size_t overhead     = candidate - this->cached_cursor->end();
+
+        // Does the gap after the cursor fit the request?
+        if (this->cached_cursor->gap >= (size + overhead)) {
+            // Voila! We found a spot without touching the tree.
+            return candidate;
+        }
+    }
+
     // Try to find a hole inside the tree
     uintptr_t found = this->find_hole(this->root, size, alignment);
     if (found != 0) {
@@ -284,7 +296,7 @@ uintptr_t VirtualMemoryAllocator::find_hole(VmRegion* node, size_t size, size_t 
         return this->find_hole(node->right, size, alignment);
     }
 
-    // We failed, Mr. Stark.
+    // We failed, Mr. Stark
     return 0;
 }
 
@@ -364,6 +376,8 @@ void VirtualMemoryAllocator::insert_region_locked(uintptr_t start, size_t size, 
             iterator = iterator->parent;
         }
     }
+
+    this->cached_cursor = z;
 
     // Rebalance
     this->insert_fixup(z);

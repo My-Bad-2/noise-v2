@@ -88,6 +88,7 @@ class VirtualMemoryAllocator {
 
     SpinLock lock;
     VmRegion* root;
+    VmRegion* cached_cursor = nullptr;
     VmRegionAllocator metadata_allocator;
 };
 }  // namespace kernel::memory
