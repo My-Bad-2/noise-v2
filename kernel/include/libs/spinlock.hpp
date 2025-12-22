@@ -245,7 +245,7 @@ constexpr DeferLock defer_lock{};
 constexpr TryToLock try_to_lock{};
 constexpr AdoptLock adopt_lock{};
 
-template <typename Mutex>
+template <typename Mutex, bool Read = false, bool Write = false>
 class LockGuard {
    public:
     using MutexType = Mutex;
@@ -253,13 +253,28 @@ class LockGuard {
     LockGuard() noexcept : m_mutex(nullptr), m_owns(false) {}
 
     explicit LockGuard(MutexType& m) : m_mutex(&m), m_owns(false) {
-        m_mutex->lock();
-        m_owns = true;
+        if constexpr (Read) {
+            this->m_mutex->acquire_read();
+        } else if constexpr (Write) {
+            this->m_mutex->acquire_write();
+        } else {
+            this->m_mutex->lock();
+        }
+
+        this->m_owns = true;
     }
 
     LockGuard(MutexType& m, DeferLock) noexcept : m_mutex(&m), m_owns(false) {}
 
-    LockGuard(MutexType& m, TryToLock) : m_mutex(&m), m_owns(m.try_lock()) {}
+    LockGuard(MutexType& m, TryToLock) : m_mutex(&m) {
+        if constexpr (Read) {
+            this->m_owns = m.try_acquire_read();
+        } else if constexpr (Write) {
+            this->m_owns = m.try_acquire_write();
+        } else {
+            this->m_owns = m.try_lock();
+        }
+    }
 
     LockGuard(MutexType& m, AdoptLock) noexcept : m_mutex(&m), m_owns(true) {}
 
@@ -269,8 +284,14 @@ class LockGuard {
     }
 
     ~LockGuard() {
-        if (m_owns) {
-            m_mutex->unlock();
+        if (this->m_owns) {
+            if constexpr (Read) {
+                this->m_mutex->release_read();
+            } else if constexpr (Write) {
+                this->m_mutex->release_write();
+            } else {
+                this->m_mutex->unlock();
+            }
         }
     }
 
@@ -280,13 +301,19 @@ class LockGuard {
     LockGuard& operator=(LockGuard&& other) noexcept {
         if (this != &other) {
             // If we currently own a lock, release it.
-            if (m_owns) {
-                m_mutex->unlock();
+            if (this->m_owns) {
+                if constexpr (Read) {
+                    this->m_mutex->release_read();
+                } else if constexpr (Write) {
+                    this->m_mutex->release_write();
+                } else {
+                    this->m_mutex->unlock();
+                }
             }
 
             // Steal resources from the other lock.
-            m_mutex = other.m_mutex;
-            m_owns  = other.m_owns;
+            this->m_mutex = other.m_mutex;
+            this->m_owns  = other.m_owns;
 
             // Leave the other lock in a safe, empty state.
             other.m_mutex = nullptr;
@@ -297,291 +324,117 @@ class LockGuard {
     }
 
     void lock() {
-        if (!m_mutex) {
+        if (!this->m_mutex) {
             return;
         }
 
-        if (m_owns) {
+        if (this->m_owns) {
             return;
         }
 
-        m_mutex->lock();
-        m_owns = true;
+        if constexpr (Read) {
+            this->m_mutex->acquire_read();
+        } else if constexpr (Write) {
+            this->m_mutex->acquire_write();
+        } else {
+            this->m_mutex->lock();
+        }
+
+        this->m_owns = true;
     }
 
     bool try_lock() {
-        if (!m_mutex) {
+        if (!this->m_mutex) {
             return false;
         }
 
-        if (m_owns) {
+        if (this->m_owns) {
             return false;
         }
 
-        m_owns = m_mutex->try_lock();
-        return m_owns;
+        if constexpr (Read) {
+            this->m_owns = this->m_mutex->try_acquire_read();
+        } else if constexpr (Write) {
+            this->m_owns = this->m_mutex->try_acquire_write();
+        } else {
+            this->m_owns = this->m_mutex->try_lock();
+        }
+
+        return this->m_owns;
     }
 
     void unlock() {
-        if (!m_owns) {
+        if (!this->m_owns) {
             return;
         }
 
-        m_mutex->unlock();
-        m_owns = false;
+        if constexpr (Read) {
+            this->m_mutex->release_read();
+        } else if constexpr (Write) {
+            this->m_mutex->release_write();
+        } else {
+            this->m_mutex->unlock();
+        }
+
+        this->m_owns = false;
     }
 
     MutexType* release() noexcept {
-        MutexType* released_mutex = m_mutex;
-        m_mutex                   = nullptr;
-        m_owns                    = false;
+        MutexType* released_mutex = this->m_mutex;
+        this->m_mutex             = nullptr;
+        this->m_owns              = false;
         return released_mutex;
     }
 
     void swap(LockGuard& other) noexcept {
-        std::swap(m_mutex, other.m_mutex);
-        std::swap(m_owns, other.m_owns);
+        std::swap(this->m_mutex, other.m_mutex);
+        std::swap(this->m_owns, other.m_owns);
     }
 
     bool owns_lock() const noexcept {
-        return m_owns;
+        return this->m_owns;
     }
 
     explicit operator bool() const noexcept {
-        return m_owns;
+        return this->m_owns;
     }
 
     MutexType* mutex() const noexcept {
-        return m_mutex;
+        return this->m_mutex;
     }
 
    private:
     MutexType* m_mutex;
     bool m_owns;
 };
-
-template <typename RwLock>
-class ReadGuard {
-   public:
-    using RwLockType = RwLock;
-
-    ReadGuard() noexcept : m_lock(nullptr), m_owns(false) {}
-
-    explicit ReadGuard(RwLockType& l) : m_lock(&l), m_owns(false) {
-        m_lock->acquire_read();
-        m_owns = true;
-    }
-
-    ReadGuard(RwLockType& l, DeferLock) noexcept : m_lock(&l), m_owns(false) {}
-
-    ReadGuard(RwLockType& l, TryToLock) : m_lock(&l), m_owns(l.try_acquire_read()) {}
-
-    ReadGuard(RwLockType& l, AdoptLock) noexcept : m_lock(&l), m_owns(true) {}
-
-    ReadGuard(ReadGuard&& other) noexcept : m_lock(other.m_lock), m_owns(other.m_owns) {
-        other.m_lock = nullptr;
-        other.m_owns = false;
-    }
-
-    ~ReadGuard() {
-        if (m_owns) {
-            m_lock->release_read();
-        }
-    }
-
-    ReadGuard(const ReadGuard&)            = delete;
-    ReadGuard& operator=(const ReadGuard&) = delete;
-
-    ReadGuard& operator=(ReadGuard&& other) noexcept {
-        if (this != &other) {
-            if (m_owns) {
-                m_lock->release_read();
-            }
-
-            m_lock       = other.m_lock;
-            m_owns       = other.m_owns;
-            other.m_lock = nullptr;
-            other.m_owns = false;
-        }
-        return *this;
-    }
-
-    void lock() {
-        if (!m_lock || m_owns) {
-            return;
-        }
-
-        m_lock->acquire_read();
-        m_owns = true;
-    }
-
-    bool try_lock() {
-        if (!m_lock || m_owns) {
-            return false;
-        }
-
-        m_owns = m_lock->try_acquire_read();
-        return m_owns;
-    }
-
-    void unlock() {
-        if (!m_owns) {
-            return;
-        }
-
-        m_lock->release_read();
-        m_owns = false;
-    }
-
-    RwLockType* release() noexcept {
-        RwLockType* released = m_lock;
-        m_lock               = nullptr;
-        m_owns               = false;
-        return released;
-    }
-
-    void swap(ReadGuard& other) noexcept {
-        std::swap(m_lock, other.m_lock);
-        std::swap(m_owns, other.m_owns);
-    }
-
-    bool owns_lock() const noexcept {
-        return m_owns;
-    }
-
-    explicit operator bool() const noexcept {
-        return m_owns;
-    }
-
-    RwLockType* mutex() const noexcept {
-        return m_lock;
-    }
-
-   private:
-    RwLockType* m_lock;
-    bool m_owns;
-};
-
-template <typename RwLock>
-class WriteGuard {
-   public:
-    using RwLockType = RwLock;
-
-    WriteGuard() noexcept : m_lock(nullptr), m_owns(false) {}
-
-    explicit WriteGuard(RwLockType& l) : m_lock(&l), m_owns(false) {
-        m_lock->acquire_write();
-        m_owns = true;
-    }
-
-    WriteGuard(RwLockType& l, DeferLock) noexcept : m_lock(&l), m_owns(false) {}
-
-    WriteGuard(RwLockType& l, TryToLock) : m_lock(&l), m_owns(l.try_acquire_write()) {}
-
-    WriteGuard(RwLockType& l, AdoptLock) noexcept : m_lock(&l), m_owns(true) {}
-
-    WriteGuard(WriteGuard&& other) noexcept : m_lock(other.m_lock), m_owns(other.m_owns) {
-        other.m_lock = nullptr;
-        other.m_owns = false;
-    }
-
-    ~WriteGuard() {
-        if (m_owns) {
-            m_lock->release_write();
-        }
-    }
-
-    WriteGuard(const WriteGuard&)            = delete;
-    WriteGuard& operator=(const WriteGuard&) = delete;
-
-    WriteGuard& operator=(WriteGuard&& other) noexcept {
-        if (this != &other) {
-            if (m_owns) {
-                m_lock->release_write();
-            }
-
-            m_lock       = other.m_lock;
-            m_owns       = other.m_owns;
-            other.m_lock = nullptr;
-            other.m_owns = false;
-        }
-        return *this;
-    }
-
-    void lock() {
-        if (!m_lock || m_owns) {
-            return;
-        }
-
-        m_lock->acquire_write();
-        m_owns = true;
-    }
-
-    bool try_lock() {
-        if (!m_lock || m_owns) {
-            return false;
-        }
-
-        m_owns = m_lock->try_acquire_write();
-        return m_owns;
-    }
-
-    void unlock() {
-        if (!m_owns) {
-            return;
-        }
-
-        m_lock->release_write();
-        m_owns = false;
-    }
-
-    RwLockType* release() noexcept {
-        RwLockType* released = m_lock;
-        m_lock               = nullptr;
-        m_owns               = false;
-        return released;
-    }
-
-    void swap(WriteGuard& other) noexcept {
-        std::swap(m_lock, other.m_lock);
-        std::swap(m_owns, other.m_owns);
-    }
-
-    bool owns_lock() const noexcept {
-        return m_owns;
-    }
-
-    explicit operator bool() const noexcept {
-        return m_owns;
-    }
-
-    RwLockType* mutex() const noexcept {
-        return m_lock;
-    }
-
-   private:
-    RwLockType* m_lock;
-    bool m_owns;
-};
-
-template <class Mutex>
-LockGuard(Mutex&) -> LockGuard<Mutex>;
-
-template <class Mutex>
-ReadGuard(Mutex&) -> ReadGuard<Mutex>;
-
-template <class Mutex>
-WriteGuard(Mutex&) -> WriteGuard<Mutex>;
 }  // namespace __details
 
-template <class Mutex>
-using LockGuard = __details::LockGuard<Mutex>;
+template <typename Mutex>
+struct LockGuard : public __details::LockGuard<Mutex, false, false> {
+    using Base = __details::LockGuard<Mutex, false, false>;
+    using Base::Base;
+};
 
-template <class Mutex>
-using ReadGuard = __details::ReadGuard<Mutex>;
+template <typename Mutex>
+LockGuard(Mutex&) -> LockGuard<Mutex>;
 
-template <class Mutex>
-using WriteGuard = __details::WriteGuard<Mutex>;
+template <typename Mutex>
+struct ReadGuard : public __details::LockGuard<Mutex, true, false> {
+    using Base = __details::LockGuard<Mutex, true, false>;
+    using Base::Base;
+};
+
+template <typename Mutex>
+ReadGuard(Mutex&) -> ReadGuard<Mutex>;
+
+template <typename Mutex>
+struct WriteGuard : public __details::LockGuard<Mutex, false, true> {
+    using Base = __details::LockGuard<Mutex, false, true>;
+    using Base::Base;
+};
+
+template <typename Mutex>
+WriteGuard(Mutex&) -> WriteGuard<Mutex>;
 
 using SpinLock      = __details::BaseLock<__details::LockType::SpinlockSpin>;
 using IrqLock       = __details::BaseLock<__details::LockType::SpinlockIrq>;

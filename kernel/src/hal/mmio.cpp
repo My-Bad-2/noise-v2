@@ -39,7 +39,7 @@ MMIORegion::MMIORegion(uintptr_t phys_addr, size_t size, memory::CacheType cache
 }
 
 // MMIORegion::~MMIORegion() {
-    // VirtualManager::free(this->page_base, false);
+// VirtualManager::free(this->page_base, false);
 // }
 
 volatile void* MMIORegion::ptr() const {
