@@ -229,37 +229,63 @@ VmRegion* VirtualMemoryAllocator::find_node(uintptr_t start) {
 }
 
 uintptr_t VirtualMemoryAllocator::find_hole(size_t size, size_t alignment) {
-    uintptr_t candidate = this->heap_base;
-    VmRegion* stack[64];
-    int top        = 0;
-    VmRegion* curr = this->root;
-
-    while (curr) {
-        stack[top++] = curr;
-        curr         = curr->left;
+    // Try to find a hole inside the tree
+    uintptr_t found = this->find_hole(this->root, size, alignment);
+    if (found != 0) {
+        return found;
     }
 
-    while (top > 0) {
-        curr              = stack[--top];
-        uintptr_t aligned = align_up(candidate, alignment);
+    VmRegion* max = this->root;
+    if (!max) {
+        // Tree is empty, return aligned base
+        return align_up(heap_base, alignment);
+    }
 
-        if (aligned + size <= curr->start) {
-            return aligned;
-        }
+    // Find the very last node.
+    while (max->right) {
+        max = max->right;
+    }
 
-        candidate = curr->end();
+    // Calculate valid address after the last node
+    return align_up(max->end(), alignment);
+}
 
-        if (curr->right) {
-            curr = curr->right;
+uintptr_t VirtualMemoryAllocator::find_hole(VmRegion* node, size_t size, size_t alignment) {
+    if (!node) {
+        return 0;
+    }
 
-            while (curr) {
-                stack[top++] = curr;
-                curr         = curr->left;
-            }
+    // If the largest anywhere in this subtree is smaller than requested size,
+    // it is impossible to find a fit. Backtrack immediately.
+    if (node->subtree_max_gap < size) {
+        return 0;
+    }
+
+    // Prefer lower addresses. If the left subtree might have a gap,
+    // look there.
+    if (node->left && node->left->subtree_max_gap >= size) {
+        uintptr_t left = this->find_hole(node->left, size, alignment);
+
+        if (left != 0) {
+            return left;
         }
     }
 
-    return align_up(candidate, alignment);
+    uintptr_t candidate   = align_up(node->end(), alignment);
+    size_t align_overhead = candidate - node->end();
+
+    // Ensure that the gap is physically large enoguht to hold (size + alignment adjustment)
+    if (node->gap >= (size + align_overhead)) {
+        return candidate;
+    }
+
+    // We failed, try right.
+    if (node->right && node->right->subtree_max_gap >= size) {
+        return this->find_hole(node->right, size, alignment);
+    }
+
+    // We failed, Mr. Stark.
+    return 0;
 }
 
 void VirtualMemoryAllocator::insert_region(uintptr_t start, size_t size, uint8_t flags,
@@ -276,6 +302,7 @@ void VirtualMemoryAllocator::insert_region_locked(uintptr_t start, size_t size, 
     z->flags    = flags;
     z->cache    = cache;
     z->is_red   = true;
+    z->left = z->right = nullptr;
 
     VmRegion* y = nullptr;
     VmRegion* x = this->root;
@@ -300,10 +327,57 @@ void VirtualMemoryAllocator::insert_region_locked(uintptr_t start, size_t size, 
         y->right = z;
     }
 
+    // We need to find the node strictly before Z (predecssor) and
+    // strictly after Z (successor) in address order to set the gaps
+    // correctly.
+    VmRegion* pred = this->predecessor(z);
+    VmRegion* succ = this->successor(z);
+
+    if (succ) {
+        // Distance to successor
+        z->gap = succ->start - z->end();
+    } else {
+        // Z is the last node in memory. Gap is effectively infinite
+        z->gap = static_cast<uintptr_t>(-1) - z->end();
+    }
+
+    // Distance to Z
+    if (pred) {
+        pred->gap = z->start - pred->end();
+    }
+
+    this->update_node_metadata(z);
+
+    // We must walk up from `z`. If we have a predessor, we must also walk up
+    // from `pred` if `pred` is not an ancestor of `z`.
+    VmRegion* iterator = z;
+    while (iterator) {
+        this->update_node_metadata(iterator);
+        iterator = iterator->parent;
+    }
+
+    if (pred) {
+        iterator = pred;
+
+        while (iterator) {
+            this->update_node_metadata(iterator);
+            iterator = iterator->parent;
+        }
+    }
+
+    // Rebalance
     this->insert_fixup(z);
 }
 
 void VirtualMemoryAllocator::delete_node_locked(VmRegion* z) {
+    // Since we are about to remove the logical range z. We must
+    // merge z's gap into its predessor's gap.
+    // Now new Gap for Pred = (gap before z) + (z's size) + (gap after z)
+    VmRegion* pred = this->predecessor(z);
+    if (pred) {
+        pred->gap += z->size + z->gap;
+    }
+
     VmRegion *x, *y;
     bool original_y_red = false;
 
@@ -311,8 +385,22 @@ void VirtualMemoryAllocator::delete_node_locked(VmRegion* z) {
         y = z;
     } else {
         y = z->right;
-        while (y->left) y = y->left;
+
+        while (y->left) {
+            y = y->left;
+        }
     }
+
+    original_y_red = y->is_red;
+    if (y->left) {
+        x = y->left;
+    } else {
+        x = y->right;
+    }
+
+    // Capture y's parent before we move pointers, so we know where
+    // to start updating metadata
+    VmRegion* update_start = y->parent;
 
     original_y_red = y->is_red;
     if (y->left) {
@@ -338,10 +426,34 @@ void VirtualMemoryAllocator::delete_node_locked(VmRegion* z) {
         z->size  = y->size;
         z->flags = y->flags;
         z->cache = y->cache;
+
+        // z now represents the region y used to hold.
+        z->gap = y->gap;
     }
 
     if (!original_y_red && x) {
         this->delete_fixup(x);
+    }
+
+    // We modified the tree structure at y->parent. We must walk up
+    // to root to recalculate `subtree_max_gap`.
+    // If y != z, z is an ancestor of y, so this will also fix z's
+    // metadata too.
+    VmRegion* curr = update_start;
+    while (curr) {
+        this->update_node_metadata(curr);
+        curr = curr->parent;
+    }
+
+    // We modified `pred->gap` at the beginning. If `pred` was not an
+    // ancestor of `update_start`, its subtree metadata is now stale.
+    // Just walk up from pred too.
+    if (pred) {
+        curr = pred;
+        while (curr) {
+            this->update_node_metadata(curr);
+            curr = curr->parent;
+        }
     }
 
     this->metadata_allocator.deallocate(y);
@@ -367,6 +479,9 @@ void VirtualMemoryAllocator::rotate_left(VmRegion* x) {
 
     y->left   = x;
     x->parent = y;
+
+    this->update_node_metadata(x);
+    this->update_node_metadata(y);
 }
 
 void VirtualMemoryAllocator::rotate_right(VmRegion* x) {
@@ -389,6 +504,9 @@ void VirtualMemoryAllocator::rotate_right(VmRegion* x) {
 
     y->right  = x;
     x->parent = y;
+
+    this->update_node_metadata(x);
+    this->update_node_metadata(y);
 }
 
 void VirtualMemoryAllocator::insert_fixup(VmRegion* z) {
@@ -511,5 +629,76 @@ void VirtualMemoryAllocator::delete_fixup(VmRegion* x) {
     if (x) {
         x->is_red = false;
     }
+}
+
+void VirtualMemoryAllocator::update_node_metadata(VmRegion* x) {
+    if (!x) {
+        return;
+    }
+
+    size_t left_max  = x->left ? x->left->subtree_max_gap : 0;
+    size_t right_max = x->right ? x->right->subtree_max_gap : 0;
+
+    size_t curr_max = left_max;
+
+    if (right_max > curr_max) {
+        curr_max = right_max;
+    }
+
+    if (x->gap > curr_max) {
+        curr_max = x->gap;
+    }
+
+    x->subtree_max_gap = curr_max;
+}
+
+VmRegion* VirtualMemoryAllocator::predecessor(VmRegion* node) {
+    // If the left subtree is not null, the successor is the
+    // rightmost (maximum) node in the left subtree.
+    if (node->left) {
+        node = node->left;
+
+        while (node->right) {
+            node = node->right;
+        }
+
+        return node;
+    }
+
+    // If the left subtree is null, the successor is the lowest
+    // ancestor for which 'x' is in the right subtree. We walk up
+    // the tree until we are no longer a left child.
+    VmRegion* p = node->parent;
+    while (p && node == p->left) {
+        node = p;
+        p    = p->parent;
+    }
+
+    return p;
+}
+
+VmRegion* VirtualMemoryAllocator::successor(VmRegion* node) {
+    // If the right subtree is not null, the successor is the
+    // leftmost (minimum) node in the right subtree.
+    if (node->right) {
+        node = node->right;
+
+        while (node->left) {
+            node = node->left;
+        }
+
+        return node;
+    }
+
+    // If the right subtree is null, the successor is the lowest
+    // ancestor for which 'x' is in the left subtree. We walk up
+    // the tree until we are no longer a right child.
+    VmRegion* p = node->parent;
+    while (p && node == p->right) {
+        node = p;
+        p    = p->parent;
+    }
+
+    return p;
 }
 }  // namespace kernel::memory

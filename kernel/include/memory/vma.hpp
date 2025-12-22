@@ -10,6 +10,9 @@ struct VmRegion {
     uintptr_t start;
     size_t size;
 
+    size_t gap;
+    size_t subtree_max_gap;
+
     uint8_t flags;
     CacheType cache;
 
@@ -55,6 +58,7 @@ class VirtualMemoryAllocator {
 
     VmRegion* find_node(uintptr_t start);
     uintptr_t find_hole(size_t size, size_t alignment);
+    uintptr_t find_hole(VmRegion* node, size_t size, size_t alignment);
 
     void insert_region(uintptr_t start, size_t size, uint8_t flags, CacheType cache);
     void insert_region_locked(uintptr_t start, size_t size, uint8_t flags, CacheType cache);
@@ -64,6 +68,11 @@ class VirtualMemoryAllocator {
     void rotate_right(VmRegion* x);
     void insert_fixup(VmRegion* z);
     void delete_fixup(VmRegion* x);
+
+    void update_node_metadata(VmRegion* x);
+
+    VmRegion* predecessor(VmRegion* node);
+    VmRegion* successor(VmRegion* node);
 
     struct alignas(CACHE_LINE_SIZE) CpuCache {
         static constexpr int CAPACITY = 256;
