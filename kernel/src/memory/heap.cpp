@@ -330,7 +330,7 @@ Slab* SlubAllocator::refill_slab(int idx) {
     Slab* s = MetadataAllocator::get().alloc();
 
     if (!s) {
-        VirtualManager::free(page, 1);
+        VirtualManager::free(page);
         return nullptr;
     }
 
@@ -412,7 +412,7 @@ void* SlubAllocator::alloc_large(size_t size) {
     Slab* s = MetadataAllocator::get().alloc();
 
     if (!s) {
-        VirtualManager::free(ptr, pages);
+        VirtualManager::free(ptr);
         return nullptr;
     }
 
@@ -427,7 +427,7 @@ void* SlubAllocator::alloc_large(size_t size) {
 void SlubAllocator::free_large(Slab* s, void* ptr) {
     size_t pages = s->in_use;
     HeapMap::set(ptr, nullptr);
-    VirtualManager::free(ptr, pages);
+    VirtualManager::free(ptr);
     MetadataAllocator::get().free(s);
 }
 

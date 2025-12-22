@@ -10,6 +10,8 @@ class MMIORegion {
     MMIORegion(uintptr_t phys_addr, size_t size,
                memory::CacheType cache = memory::CacheType::Uncached);
 
+    // ~MMIORegion();
+
     template <typename T>
     void write(size_t offset, T value) {
         volatile T* addr = reinterpret_cast<volatile T*>(this->virt_base + offset);

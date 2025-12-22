@@ -1,11 +1,7 @@
 #include "hal/smp_manager.hpp"
-#include "libs/log.hpp"
-#include "memory/memory.hpp"
-#include "memory/pagemap.hpp"
 #include "boot/boot.h"
 #include "libs/elf.h"
 #include "libs/math.hpp"
-#include "task/process.hpp"
 #include "memory/vmm.hpp"
 #include "memory/vma.hpp"
 
@@ -202,7 +198,7 @@ void* VirtualManager::allocate(size_t count, PageSize size, uint8_t flags, Cache
     return vma.allocate(total_bytes, flags, cache);
 }
 
-void VirtualManager::free(void* ptr, size_t count, PageSize size, bool free_phys) {
+void VirtualManager::free(void* ptr, bool free_phys) {
     vma.free(ptr, free_phys);
 }
 

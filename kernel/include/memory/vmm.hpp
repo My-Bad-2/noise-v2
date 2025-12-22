@@ -11,8 +11,7 @@ class VirtualManager {
 
     static void* allocate(size_t count, PageSize size = PageSize::Size4K,
                           uint8_t flags = Read | Write, CacheType cache = CacheType::WriteBack);
-    static void free(void* ptr, size_t count, PageSize size = PageSize::Size4K,
-                     bool free_phys = true);
+    static void free(void* ptr, bool free_phys = true);
 
     // Returns an unmapped, aligned virtual region that callers can
     // manually map to device physical addresses. Only the virtual space

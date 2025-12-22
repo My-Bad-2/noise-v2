@@ -1,11 +1,6 @@
 #include "task/scheduler.hpp"
-#include "arch.hpp"
-#include "cpu/exception.hpp"
 #include "hal/smp_manager.hpp"
 #include "hal/timer.hpp"
-#include "libs/log.hpp"
-#include "memory/pcid_manager.hpp"
-#include "task/process.hpp"
 
 // Low-level context switch routine implemented in architecture-specific assembly.
 extern "C" void context_switch(kernel::task::Thread* prev, kernel::task::Thread* next);
@@ -13,9 +8,12 @@ extern "C" void context_switch(kernel::task::Thread* prev, kernel::task::Thread*
 namespace kernel::task {
 namespace {
 // Generated using `misc/scripts/gen_time_quanta.py`
-constexpr uint16_t TIME_SLICE_QUANTA[32] = {10,  12,  13,  15,  17,  20,  23,  27,  31,  35,  40,
-                                            47,  54,  62,  71,  81,  94,  108, 124, 142, 164, 188,
-                                            216, 249, 286, 329, 379, 435, 501, 576, 662, 761};
+constexpr uint16_t TIME_SLICE_QUANTA[64] = {
+    10,  11,   12,   13,   15,   16,   18,   19,   21,   24,   26,   29,   31,   35,   38,   42,
+    46,  51,   56,   61,   67,   74,   81,   90,   98,   108,  119,  131,  144,  159,  174,  192,
+    211, 232,  255,  281,  309,  340,  374,  411,  453,  498,  548,  602,  663,  729,  802,  882,
+    970, 1067, 1174, 1291, 1420, 1562, 1719, 1891, 2080, 2288, 2516, 2768, 3045, 3349, 3684, 4053,
+};
 }  // namespace
 
 void Scheduler::add_thread(Thread* t) {
@@ -55,7 +53,7 @@ void Scheduler::add_thread(Thread* t) {
 Thread* Scheduler::get_next_thread() {
     // Pick thread from the highest priority none-empty queue
     if (this->active_queues_bitmap != 0) {
-        int highest_prio = __builtin_ctz(this->active_queues_bitmap);
+        int highest_prio = __builtin_ctzll(this->active_queues_bitmap);
 
         Thread* t = &this->ready_queue[highest_prio].front();
         this->ready_queue[highest_prio].pop_front();
@@ -102,7 +100,7 @@ Thread* Scheduler::try_steal() {
             // Ideally, we want to help with the most important work, but taking from tail
             // minimizes cache thrashing for the victim.
             if (victim_sched.active_queues_bitmap != 0) {
-                int p = __builtin_ctz(victim_sched.active_queues_bitmap);
+                int p = __builtin_ctzll(victim_sched.active_queues_bitmap);
 
                 // We found a queue. Steal the tail.
                 if (!victim_sched.ready_queue[p].empty()) {
@@ -286,7 +284,7 @@ cpu::IrqStatus Scheduler::tick() {
         this->schedule();
     } else {
         if (this->active_queues_bitmap != 0) {
-            int highest_active_prio = __builtin_ctz(this->active_queues_bitmap);
+            int highest_active_prio = __builtin_ctzll(this->active_queues_bitmap);
 
             if (highest_active_prio < curr->priority) {
                 // A more important thread is ready, schedule immediately without

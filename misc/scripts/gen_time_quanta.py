@@ -38,8 +38,8 @@ def print_cpp_array(quanta):
 TOTAL_LEVELS = int(input("Total MLFQ levels: "))
 INITIAL_QUANTA = int(input("Initial Quanta: "))
 
-# Set a specific multiplier (1.15 = 15% increase per level)
-GROWTH_RATE = 1.15 
+# Set a specific multiplier (1.1 = 10% increase per level)
+GROWTH_RATE = 1.1 
 TARGET_MAX = None
 
 if __name__ == "__main__":

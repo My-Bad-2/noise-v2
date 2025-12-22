@@ -1,13 +1,5 @@
-#include "task/process.hpp"
-#include <atomic>
 #include "hal/smp_manager.hpp"
-#include "libs/log.hpp"
-#include "libs/spinlock.hpp"
-#include "memory/memory.hpp"
-#include "memory/pagemap.hpp"
-#include "libs/math.hpp"
 #include "boot/boot.h"
-#include "memory/pcid_manager.hpp"
 
 namespace kernel::task {
 Process* Process::kernel_proc         = nullptr;

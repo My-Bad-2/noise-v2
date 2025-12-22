@@ -178,10 +178,9 @@ bool PortManager::is_valid_port(size_t handle) {
         return false;
     }
 
-    // if the handle's generation doesn't match the table's
-    // it means the original port was deleted and a new one
-    // was created at the same index. This handle is STALE
-    // and must be rejected.
+    // if the handle's generation doesn't match the table's it means the
+    // original port was deleted and a new one was created at the same
+    // index. This handle is stale and must be rejected.
     if (this->table[index].generation != gen) {
         return false;
     }

@@ -5,7 +5,7 @@
 #include "libs/spinlock.hpp"
 #include "task/process.hpp"
 
-#define MLFQ_LEVELS               32
+#define MLFQ_LEVELS               64
 #define PRIORITY_BOOST_INTERVAL   1000
 #define STARVATION_CHECK_INTERVAL 100
 #define GRIM_REAPER_INTERVAL      2000
@@ -42,7 +42,7 @@ struct Scheduler {
     Thread* try_steal();
 
     uint32_t cpu_id;
-    uint32_t active_queues_bitmap;
+    size_t active_queues_bitmap;
     volatile size_t current_ticks = 0;
 
     IntrusiveList<Thread, SchedulerTag>* ready_queue;
