@@ -69,7 +69,7 @@ struct Process : public IntrusiveListNode<ProcessTag> {
     IntrusiveList<Process, ProcessTag> children;
     IntrusiveList<Thread, ProcessTag> threads;
 
-    memory::VirtualAllocator user_vmm;
+    // memory::VirtualAllocator user_vmm;
     int exit_code;
 
     static Process* kernel_proc;
@@ -78,8 +78,8 @@ struct Process : public IntrusiveListNode<ProcessTag> {
     Process();                      // User
     ~Process();
 
-    void* mmap(size_t count, memory::PageSize size, uint8_t flags);
-    void munmap(void* addr, size_t count, memory::PageSize size);
+    // void* mmap(size_t count, memory::PageSize size, uint8_t flags);
+    // void munmap(void* addr, size_t count, memory::PageSize size);
 
     static void init();
 

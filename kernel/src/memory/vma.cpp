@@ -1,200 +1,515 @@
 #include "memory/vma.hpp"
-#include "memory/memory.hpp"
+#include "boot/boot.h"
 #include "memory/pmm.hpp"
-#include "libs/log.hpp"
 #include "libs/math.hpp"
+#include "hal/smp_manager.hpp"
 
 namespace kernel::memory {
-void VirtualAllocator::expand_pool() {
-    // Grow the node pool by allocating one physical page and treating it
-    // as an array of `VmFreeRegion` nodes. Nodes are then threaded into
-    // a free-node singly-linked list.
-    void* pool_phys = PhysicalManager::alloc();
+VmRegion* VmRegionAllocator::allocate() {
+    LockGuard guard(this->lock);
 
-    if (pool_phys == nullptr) {
-        PANIC("Virtual Allocator Out of Memory - Cannot expand node pool!");
+    if (!this->free_head) {
+        this->refill();
     }
 
-    VmFreeRegion* pool_base = static_cast<VmFreeRegion*>(to_higher_half(pool_phys));
-    size_t node_count       = PAGE_SIZE_4K / sizeof(VmFreeRegion);
+    VmRegion* node  = reinterpret_cast<VmRegion*>(this->free_head);
+    this->free_head = this->free_head->next;
 
-    for (size_t i = 0; i < node_count - 1; ++i) {
-        pool_base[i].next = &pool_base[i + 1];
-    }
-
-    pool_base[node_count - 1].next = this->free_nodes_head;
-    this->free_nodes_head          = &pool_base[0];
-
-    LOG_INFO("VirtualAllocator: expanded node pool by %zu nodes", node_count);
-}
-
-VmFreeRegion* VirtualAllocator::new_node() {
-    // Node pool is grown lazily on demand so that idle systems don't
-    // waste physical pages on metadata.
-    if (this->free_nodes_head == nullptr) {
-        expand_pool();
-
-        if (this->free_nodes_head == nullptr) {
-            LOG_ERROR("VirtualAllocator: new_node failed after expand_pool");
-            return nullptr;
-        }
-    }
-
-    VmFreeRegion* node = free_nodes_head;
-    free_nodes_head    = free_nodes_head->next;
-
-    // Reset node contents to a known state before use.
-    node->start  = 0;
-    node->length = 0;
-    node->next   = nullptr;
+    node->parent = node->left = node->right = nullptr;
 
     return node;
 }
 
-void VirtualAllocator::return_node(VmFreeRegion* node) {
-    // Return metadata to the free-node pool instead of freeing pages:
-    // we keep node pages around to serve future allocations.
-    node->next      = this->free_nodes_head;
-    free_nodes_head = node;
+void VmRegionAllocator::deallocate(VmRegion* node) {
+    LockGuard guard(this->lock);
+
+    reinterpret_cast<FreeNode*>(node)->next = this->free_head;
+    this->free_head                         = reinterpret_cast<FreeNode*>(node);
 }
 
-uintptr_t VirtualAllocator::alloc_region(size_t size, size_t align) {
-    // First-fit search over a sorted list of free ranges. The alignment
-    // constraint may force us to split a free region into up to two
-    // pieces (prefix, suffix) around the allocated block.
-    VmFreeRegion* curr = this->region_head;
-    VmFreeRegion* prev = nullptr;
+void VmRegionAllocator::refill() {
+    void* phys          = PhysicalManager::alloc();
+    uintptr_t virt_base = to_higher_half(reinterpret_cast<uintptr_t>(phys));
 
-    while (curr) {
-        uintptr_t aligned_addr = align_up(curr->start, align);
-        uintptr_t alloc_end    = aligned_addr + size;
-        uintptr_t curr_end     = curr->start + curr->length;
+    size_t count    = PAGE_SIZE_4K / sizeof(VmRegion);
+    VmRegion* nodes = reinterpret_cast<VmRegion*>(virt_base);
 
-        if (alloc_end <= curr_end) {
-            // The requested region fits inside `curr`.
-            if (aligned_addr > curr->start) {
-                // Case 1: we leave a prefix and maybe a suffix.
-                uintptr_t tail_size = curr_end - alloc_end;
+    for (size_t i = 0; i < count; ++i) {
+        reinterpret_cast<FreeNode*>(&nodes[i])->next = this->free_head;
+        this->free_head                              = reinterpret_cast<FreeNode*>(&nodes[i]);
+    }
+}
 
-                if (tail_size > 0) {
-                    // Create a tail region after the allocated block.
-                    VmFreeRegion* tail = new_node();
+void VirtualMemoryAllocator::init(uintptr_t start_addr) {
+    this->cpu_count = mp_request.response->cpu_count;
 
-                    if (!tail) {
-                        LOG_ERROR("VirtualAllocator: failed to allocate tail node");
-                        return 0;
-                    }
+    size_t cache_size       = sizeof(CpuCache) * this->cpu_count;
+    uintptr_t aligned_start = align_up(start_addr, PAGE_SIZE_1G);
 
-                    tail->start  = alloc_end;
-                    tail->length = tail_size;
-                    tail->next   = curr->next;
+    uintptr_t curr_addr = aligned_start;
+    uintptr_t cache_end = aligned_start + cache_size;
 
-                    curr->next = tail;
-                }
+    while (curr_addr < cache_end) {
+        void* phys = PhysicalManager::alloc();
+        PageMap::get_kernel_map()->map(curr_addr, reinterpret_cast<uintptr_t>(phys), Read | Write,
+                                       CacheType::WriteBack, PageSize::Size4K);
 
-                // Shrink the current region to just the prefix.
-                curr->length = aligned_addr - curr->start;
-
-                // LOG_DEBUG("VirtualAllocator: alloc_region size=0x%zx align=0x%zx -> 0x%lx
-                // (split)",
-                //   size, align, aligned_addr);
-                return aligned_addr;
-            } else {
-                // Case 2: allocation starts at the beginning of `curr`.
-                size_t tail_size = curr_end - alloc_end;
-                uintptr_t res    = curr->start;
-
-                if (tail_size == 0) {
-                    // Entire region consumed; unlink it from the list.
-                    if (prev) {
-                        prev->next = curr->next;
-                    } else {
-                        this->region_head = curr->next;
-                    }
-
-                    return_node(curr);
-                } else {
-                    // Leave only the tail as the new free region.
-                    curr->start  = alloc_end;
-                    curr->length = tail_size;
-                }
-
-                // LOG_DEBUG("VirtualAllocator: alloc_region size=0x%zx align=0x%zx -> 0x%lx
-                // (trim)",
-                //   size, align, res);
-                return res;
-            }
-        }
-
-        prev = curr;
-        curr = curr->next;
+        curr_addr += PAGE_SIZE_4K;
     }
 
-    LOG_WARN("VirtualAllocator: alloc_region failed size=0x%zx align=0x%zx", size, align);
-    return 0;
+    this->caches = reinterpret_cast<CpuCache*>(aligned_start);
+    for (size_t i = 0; i < this->cpu_count; ++i) {
+        this->caches[i].count = 0;
+    }
+
+    this->heap_base = align_up(cache_end, PAGE_SIZE_4K);
+    this->root      = nullptr;
 }
 
-void VirtualAllocator::free_region(uintptr_t start, size_t size) {
-    // Insert a newly freed region back into the sorted list and then
-    // eagerly coalesce with neighboring regions to combat fragmentation.
-    VmFreeRegion* node = new_node();
+void* VirtualMemoryAllocator::allocate(size_t size, uint8_t flags, CacheType cache) {
+    if (size == PAGE_SIZE_4K) {
+        uint32_t cpu   = 0;
+        auto& core_mgr = cpu::CpuCoreManager::get();
 
-    if (!node) {
-        LOG_ERROR("VirtualAllocator: free_region cannot allocate node (leak of virt range)");
+        if (core_mgr.initialized()) {
+            cpu = core_mgr.get_current_core()->core_idx;
+        }
+
+        if ((cpu >= 0) && (static_cast<size_t>(cpu) < this->cpu_count)) {
+            CpuCache& cpu_cache = this->caches[cpu];
+
+            cpu_cache.lock.lock();
+
+            if (cpu_cache.count > 0) {
+                uintptr_t virt_addr = cpu_cache.va_holes[--cpu_cache.count];
+                cpu_cache.lock.unlock();
+
+                this->map(virt_addr, size, flags, cache);
+                this->insert_region(virt_addr, size, flags, cache);
+                return reinterpret_cast<void*>(virt_addr);
+            }
+
+            cpu_cache.lock.unlock();
+        }
+    }
+
+    this->lock.lock();
+
+    size_t align = PAGE_SIZE_4K;
+
+    if (size >= PAGE_SIZE_1G) {
+        align = PAGE_SIZE_1G;
+    } else if (size >= PAGE_SIZE_2M) {
+        align = PAGE_SIZE_2M;
+    }
+
+    uintptr_t virt_addr = this->find_hole(size, align);
+    this->insert_region_locked(virt_addr, size, flags, cache);
+
+    this->lock.unlock();
+
+    this->map(virt_addr, size, flags, cache);
+    return reinterpret_cast<void*>(virt_addr);
+}
+
+void* VirtualMemoryAllocator::reserve(size_t size, size_t alignment, uint8_t flags) {
+    this->lock.lock();
+
+    uintptr_t virt_addr = this->find_hole(size, alignment);
+    this->insert_region_locked(virt_addr, size, flags, CacheType::Uncached);
+
+    this->lock.unlock();
+
+    return reinterpret_cast<void*>(virt_addr);
+}
+
+void VirtualMemoryAllocator::free(void* ptr, bool free_phys) {
+    if (!ptr) {
         return;
     }
 
-    node->start  = start;
-    node->length = size;
+    uintptr_t virt_addr = reinterpret_cast<uintptr_t>(ptr);
 
-    VmFreeRegion* curr = this->region_head;
-    VmFreeRegion* prev = nullptr;
+    this->lock.lock();
+    VmRegion* node = this->find_node(virt_addr);
 
-    while (curr && curr->start < start) {
-        prev = curr;
-        curr = curr->next;
+    if (!node) {
+        this->lock.unlock();
+        return;
     }
 
-    if (prev) {
-        prev->next = node;
-        node->next = curr;
-    } else {
-        node->next        = this->region_head;
-        this->region_head = node;
-    }
+    size_t size = node->size;
 
-    // Coalesce with right neighbor if directly adjacent.
-    if (node->next && (node->start + node->length == node->next->start)) {
-        VmFreeRegion* victim = node->next;
-        node->length += victim->length;
-        node->next = victim->next;
-        return_node(victim);
-    }
+    this->delete_node_locked(node);
+    this->lock.unlock();
 
-    // Coalesce with left neighbor if directly adjacent.
-    if (prev && (prev->start + prev->length == node->start)) {
-        prev->length += node->length;
-        prev->next = node->next;
-        return_node(node);
-    }
+    this->unmap(virt_addr, size, free_phys);
 
-    // LOG_DEBUG("VirtualAllocator: free_region start=0x%lx size=0x%zx", start, size);
+    if (free_phys && size == PAGE_SIZE_4K) {
+        uint32_t cpu   = 0;
+        auto& core_mgr = cpu::CpuCoreManager::get();
+
+        if (core_mgr.initialized()) {
+            cpu = core_mgr.get_current_core()->core_idx;
+        }
+
+        if ((cpu >= 0) && (static_cast<size_t>(cpu) < this->cpu_count)) {
+            CpuCache& cache = this->caches[cpu];
+
+            cache.lock.lock();
+
+            if (cache.count < CpuCache::CAPACITY) {
+                cache.va_holes[cache.count++] = virt_addr;
+            }
+
+            cache.lock.unlock();
+        }
+    }
 }
 
-void VirtualAllocator::init(uintptr_t start, size_t length) {
-    // Bootstrap the allocator with one big free region that covers the
-    // entire virtual heap range. Node pool is pre-expanded once here.
-    expand_pool();
+void VirtualMemoryAllocator::map(uintptr_t virt_addr, size_t size, uint8_t flags, CacheType cache) {
+    auto* kmap = PageMap::get_kernel_map();
 
-    this->region_head = this->new_node();
-    if (!this->region_head) {
-        PANIC("VirtualAllocator: failed to initialize region head");
+    uintptr_t curr = virt_addr;
+    uintptr_t end  = virt_addr + size;
+
+    while (curr < end) {
+        size_t remaining = end - curr;
+
+        if ((remaining >= PAGE_SIZE_1G) && (curr % PAGE_SIZE_1G == 0)) {
+            kmap->map(virt_addr, flags, cache, PageSize::Size1G);
+            curr += PAGE_SIZE_1G;
+        } else if ((remaining >= PAGE_SIZE_2M) && (curr % PAGE_SIZE_2M == 0)) {
+            kmap->map(virt_addr, flags, cache, PageSize::Size2M);
+            curr += PAGE_SIZE_2M;
+        } else {
+            kmap->map(curr, flags, cache, PageSize::Size4K);
+            curr += PAGE_SIZE_4K;
+        }
+    }
+}
+
+void VirtualMemoryAllocator::unmap(uintptr_t virt_addr, size_t size, bool free_phys) {
+    auto* kmap = PageMap::get_kernel_map();
+
+    uintptr_t curr = virt_addr;
+    uintptr_t end  = virt_addr + size;
+
+    while (curr < end) {
+        uintptr_t remaining = end - curr;
+        size_t step         = PAGE_SIZE_4K;
+
+        if ((curr % PAGE_SIZE_1G == 0) && (remaining >= PAGE_SIZE_1G)) {
+            step = PAGE_SIZE_1G;
+        } else if ((curr % PAGE_SIZE_2M == 0) && (remaining >= PAGE_SIZE_2M)) {
+            step = PAGE_SIZE_2M;
+        }
+
+        kmap->unmap(curr, 0, free_phys);
+        curr += step;
+    }
+}
+
+VmRegion* VirtualMemoryAllocator::find_node(uintptr_t start) {
+    VmRegion* curr = this->root;
+
+    while (curr) {
+        if (start == curr->start) {
+            return curr;
+        }
+
+        if (start < curr->start) {
+            curr = curr->left;
+        } else {
+            curr = curr->right;
+        }
     }
 
-    this->region_head->start  = start;
-    this->region_head->length = length;
-    this->region_head->next   = nullptr;
+    return nullptr;
+}
 
-    LOG_INFO("VirtualAllocator: initialized region [0x%lx, 0x%lx)", start, start + length);
+uintptr_t VirtualMemoryAllocator::find_hole(size_t size, size_t alignment) {
+    uintptr_t candidate = this->heap_base;
+    VmRegion* stack[64];
+    int top        = 0;
+    VmRegion* curr = this->root;
+
+    while (curr) {
+        stack[top++] = curr;
+        curr         = curr->left;
+    }
+
+    while (top > 0) {
+        curr              = stack[--top];
+        uintptr_t aligned = align_up(candidate, alignment);
+
+        if (aligned + size <= curr->start) {
+            return aligned;
+        }
+
+        candidate = curr->end();
+
+        if (curr->right) {
+            curr = curr->right;
+
+            while (curr) {
+                stack[top++] = curr;
+                curr         = curr->left;
+            }
+        }
+    }
+
+    return align_up(candidate, alignment);
+}
+
+void VirtualMemoryAllocator::insert_region(uintptr_t start, size_t size, uint8_t flags,
+                                           CacheType cache) {
+    LockGuard guard(this->lock);
+    this->insert_region_locked(start, size, flags, cache);
+}
+
+void VirtualMemoryAllocator::insert_region_locked(uintptr_t start, size_t size, uint8_t flags,
+                                                  CacheType cache) {
+    VmRegion* z = this->metadata_allocator.allocate();
+    z->start    = start;
+    z->size     = size;
+    z->flags    = flags;
+    z->cache    = cache;
+    z->is_red   = true;
+
+    VmRegion* y = nullptr;
+    VmRegion* x = this->root;
+
+    while (x != nullptr) {
+        y = x;
+
+        if (z->start < x->start) {
+            x = x->left;
+        } else {
+            x = x->right;
+        }
+    }
+
+    z->parent = y;
+
+    if (!y) {
+        this->root = z;
+    } else if (z->start < y->start) {
+        y->left = z;
+    } else {
+        y->right = z;
+    }
+
+    this->insert_fixup(z);
+}
+
+void VirtualMemoryAllocator::delete_node_locked(VmRegion* z) {
+    VmRegion *x, *y;
+    bool original_y_red = false;
+
+    if (!z->left || !z->right) {
+        y = z;
+    } else {
+        y = z->right;
+        while (y->left) y = y->left;
+    }
+
+    original_y_red = y->is_red;
+    if (y->left) {
+        x = y->left;
+    } else {
+        x = y->right;
+    }
+
+    if (x) {
+        x->parent = y->parent;
+    }
+
+    if (!y->parent) {
+        root = x;
+    } else if (y == y->parent->left) {
+        y->parent->left = x;
+    } else {
+        y->parent->right = x;
+    }
+
+    if (y != z) {
+        z->start = y->start;
+        z->size  = y->size;
+        z->flags = y->flags;
+        z->cache = y->cache;
+    }
+
+    if (!original_y_red && x) {
+        this->delete_fixup(x);
+    }
+
+    this->metadata_allocator.deallocate(y);
+}
+
+void VirtualMemoryAllocator::rotate_left(VmRegion* x) {
+    VmRegion* y = x->right;
+    x->right    = y->left;
+
+    if (y->left) {
+        y->left->parent = x;
+    }
+
+    y->parent = x->parent;
+
+    if (!x->parent) {
+        root = y;
+    } else if (x == x->parent->left) {
+        x->parent->left = y;
+    } else {
+        x->parent->right = y;
+    }
+
+    y->left   = x;
+    x->parent = y;
+}
+
+void VirtualMemoryAllocator::rotate_right(VmRegion* x) {
+    VmRegion* y = x->left;
+    x->left     = y->right;
+
+    if (y->right) {
+        y->right->parent = x;
+    }
+
+    y->parent = x->parent;
+
+    if (!x->parent) {
+        root = y;
+    } else if (x == x->parent->right) {
+        x->parent->right = y;
+    } else {
+        x->parent->left = y;
+    }
+
+    y->right  = x;
+    x->parent = y;
+}
+
+void VirtualMemoryAllocator::insert_fixup(VmRegion* z) {
+    while (z->parent && z->parent->is_red) {
+        if (z->parent == z->parent->parent->left) {
+            VmRegion* y = z->parent->parent->right;
+
+            if (y && y->is_red) {
+                z->parent->is_red         = false;
+                y->is_red                 = false;
+                z->parent->parent->is_red = true;
+                z                         = z->parent->parent;
+            } else {
+                if (z == z->parent->right) {
+                    z = z->parent;
+                    this->rotate_left(z);
+                }
+
+                z->parent->is_red         = false;
+                z->parent->parent->is_red = true;
+                this->rotate_right(z->parent->parent);
+            }
+        } else {
+            VmRegion* y = z->parent->parent->left;
+
+            if (y && y->is_red) {
+                z->parent->is_red         = false;
+                y->is_red                 = false;
+                z->parent->parent->is_red = true;
+                z                         = z->parent->parent;
+            } else {
+                if (z == z->parent->left) {
+                    z = z->parent;
+                    this->rotate_right(z);
+                }
+
+                z->parent->is_red         = false;
+                z->parent->parent->is_red = true;
+                this->rotate_left(z->parent->parent);
+            }
+        }
+    }
+
+    this->root->is_red = false;
+}
+
+void VirtualMemoryAllocator::delete_fixup(VmRegion* x) {
+    while (x != root && !x->is_red) {
+        if (x == x->parent->left) {
+            VmRegion* w = x->parent->right;
+
+            if (w->is_red) {
+                w->is_red         = false;
+                x->parent->is_red = true;
+                this->rotate_left(x->parent);
+                w = x->parent->right;
+            }
+
+            if ((!w->left || !w->left->is_red) && (!w->right || !w->right->is_red)) {
+                w->is_red = true;
+                x         = x->parent;
+            } else {
+                if (!w->right || !w->right->is_red) {
+                    if (w->left) {
+                        w->left->is_red = false;
+                    }
+
+                    w->is_red = true;
+                    this->rotate_right(w);
+                    w = x->parent->right;
+                }
+
+                w->is_red         = x->parent->is_red;
+                x->parent->is_red = false;
+
+                if (w->right) {
+                    w->right->is_red = false;
+                }
+
+                this->rotate_left(x->parent);
+                x = root;
+            }
+        } else {
+            VmRegion* w = x->parent->left;
+
+            if (w->is_red) {
+                w->is_red         = false;
+                x->parent->is_red = true;
+                this->rotate_right(x->parent);
+                w = x->parent->left;
+            }
+
+            if ((!w->right || !w->right->is_red) && (!w->left || !w->left->is_red)) {
+                w->is_red = true;
+                x         = x->parent;
+            } else {
+                if (!w->left || !w->left->is_red) {
+                    if (w->right) {
+                        w->right->is_red = false;
+                    }
+
+                    w->is_red = true;
+                    this->rotate_left(w);
+                    w = x->parent->left;
+                }
+
+                w->is_red         = x->parent->is_red;
+                x->parent->is_red = false;
+
+                if (w->left) {
+                    w->left->is_red = false;
+                }
+
+                this->rotate_right(x->parent);
+                x = root;
+            }
+        }
+    }
+
+    if (x) {
+        x->is_red = false;
+    }
 }
 }  // namespace kernel::memory

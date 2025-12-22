@@ -2,27 +2,83 @@
 
 #include <cstdint>
 #include <cstddef>
+#include "libs/spinlock.hpp"
+#include "memory/pagemap.hpp"
 
 namespace kernel::memory {
-struct VmFreeRegion {
-    uintptr_t start;     ///< Start of the free virtual range (inclusive).
-    size_t length;       ///< Length of the free range in bytes.
-    VmFreeRegion* next;  ///< Next region in the sorted free list.
+struct VmRegion {
+    uintptr_t start;
+    size_t size;
+
+    uint8_t flags;
+    CacheType cache;
+
+    VmRegion* parent = nullptr;
+    VmRegion* left   = nullptr;
+    VmRegion* right  = nullptr;
+    bool is_red      = true;
+
+    uintptr_t end() const {
+        return this->start + this->size;
+    }
 };
 
-class VirtualAllocator {
+class VmRegionAllocator {
    public:
-    void init(uintptr_t start, size_t length);
-
-    uintptr_t alloc_region(size_t size, size_t align);
-    void free_region(uintptr_t start, size_t size);
+    VmRegion* allocate();
+    void deallocate(VmRegion* node);
 
    private:
-    VmFreeRegion* new_node();
-    void return_node(VmFreeRegion* node);
-    void expand_pool();
+    void refill();
 
-    VmFreeRegion* region_head     = nullptr;  ///< Head of the sorted free-region list.
-    VmFreeRegion* free_nodes_head = nullptr;  ///< Head of the free-node pool.
+    struct FreeNode {
+        FreeNode* next;
+    };
+
+    FreeNode* free_head = nullptr;
+    SpinLock lock;
+};
+
+class VirtualMemoryAllocator {
+   public:
+    void init(uintptr_t start_addr);
+
+    void* allocate(size_t size, uint8_t flags = Read | Write,
+                   CacheType cache = CacheType::WriteBack);
+
+    void* reserve(size_t size, size_t alignment, uint8_t flags);
+    void free(void* ptr, bool free_phys);
+
+   private:
+    void map(uintptr_t virt_addr, size_t size, uint8_t flags, CacheType cache);
+    void unmap(uintptr_t virt_addr, size_t size, bool free_phys);
+
+    VmRegion* find_node(uintptr_t start);
+    uintptr_t find_hole(size_t size, size_t alignment);
+
+    void insert_region(uintptr_t start, size_t size, uint8_t flags, CacheType cache);
+    void insert_region_locked(uintptr_t start, size_t size, uint8_t flags, CacheType cache);
+
+    void delete_node_locked(VmRegion* z);
+    void rotate_left(VmRegion* x);
+    void rotate_right(VmRegion* x);
+    void insert_fixup(VmRegion* z);
+    void delete_fixup(VmRegion* x);
+
+    struct alignas(CACHE_LINE_SIZE) CpuCache {
+        static constexpr int CAPACITY = 256;
+        uintptr_t va_holes[CAPACITY];
+        int count = 0;
+        IrqLock lock;
+    };
+
+    uintptr_t heap_base;
+    size_t cpu_count;
+
+    CpuCache* caches = nullptr;
+
+    SpinLock lock;
+    VmRegion* root;
+    VmRegionAllocator metadata_allocator;
 };
 }  // namespace kernel::memory

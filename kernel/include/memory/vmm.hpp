@@ -24,5 +24,7 @@ class VirtualManager {
    private:
     static void map_pagemap();
     static void map_kernel();
+
+    static size_t page_size_to_bytes(PageSize size, size_t count);
 };
 }  // namespace kernel::memory

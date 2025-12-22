@@ -8,13 +8,12 @@
 #include "task/process.hpp"
 #include "memory/vmm.hpp"
 #include "memory/vma.hpp"
-#include "memory/cow.hpp"
 
 namespace kernel::memory {
 namespace {
 // Global kernel page map used as the bootstrap address space.
-PageMap kernel_pagemap          = PageMap();
-VirtualAllocator virt_allocator = VirtualAllocator();
+PageMap kernel_pagemap     = PageMap();
+VirtualMemoryAllocator vma = VirtualMemoryAllocator();
 
 uint8_t convert_elf_flags(uint32_t p_flags) {
     uint8_t flags = Read;
@@ -161,13 +160,12 @@ void VirtualManager::init() {
     // Reserve a large virtual region above all physical memory as the
     // kernel's "virtual heap" arena. Physical pages will be mapped here
     // on demand by the higher-level allocator.
-    constexpr size_t virt_heap_size = 0x10000000000;  // 1 TiB Capacity
-    uintptr_t virt_heap_start       = to_higher_half(get_highest_phys_address());
-    virt_heap_start                 = align_up(virt_heap_start, PAGE_SIZE_1G);
+    uintptr_t virt_heap_start = to_higher_half(get_highest_phys_address());
+    virt_heap_start           = align_up(virt_heap_start, PAGE_SIZE_1G);
 
-    LOG_INFO("VMM: initializing virtual heap at 0x%lx size=0x%lx", virt_heap_start, virt_heap_size);
+    LOG_INFO("VMM: initializing virtual heap at 0x%lx", virt_heap_start);
 
-    virt_allocator.init(virt_heap_start, virt_heap_size);
+    vma.init(virt_heap_start);
 }
 
 PageMap* PageMap::get_kernel_map() {
@@ -187,114 +185,28 @@ PageMap* VirtualManager::curr_map() {
     return &kernel_pagemap;
 }
 
-void* VirtualManager::allocate(size_t count, PageSize size, uint8_t flags, CacheType cache) {
-    size_t align_bytes = 0;
-    size_t step_bytes  = 0;
-
+size_t VirtualManager::page_size_to_bytes(PageSize size, size_t count) {
     switch (size) {
-        case PageSize::Size4K:
-            align_bytes = PAGE_SIZE_4K;
-            step_bytes  = PAGE_SIZE_4K;
-            break;
-        case PageSize::Size2M:
-            align_bytes = PAGE_SIZE_2M;
-            step_bytes  = PAGE_SIZE_2M;
-            break;
         case PageSize::Size1G:
-            align_bytes = PAGE_SIZE_1G;
-            step_bytes  = PAGE_SIZE_1G;
-            break;
+            return count * PAGE_SIZE_1G;
+        case PageSize::Size2M:
+            return count * PAGE_SIZE_2M;
+        case PageSize::Size4K:
+        default:
+            return count * PAGE_SIZE_4K;
     }
+}
 
-    size_t total_bytes = count * step_bytes;
-
-    // First, reserve a virtual range from the allocator.
-    uintptr_t virt_addr = virt_allocator.alloc_region(total_bytes, align_bytes);
-
-    if (virt_addr == 0) {
-        LOG_WARN("VMM: allocate failed (virt space) count=%zu size=%u", count,
-                 static_cast<unsigned>(size));
-        return nullptr;
-    }
-
-    bool is_lazy = (flags & Lazy) && CowManager::initialized();
-
-    if (is_lazy) {
-        // We can't use 2MB/1GB pages for CoW because we only have a 4KB zero page.
-        // So, we map everything as 4KB pages
-        flags &= ~Write;
-        uintptr_t zero_page = CowManager::get_zero_page_phys();
-        size_t total_pages  = total_bytes / PAGE_SIZE_4K;
-
-        for (size_t i = 0; i < total_pages; ++i) {
-            curr_map()->map(virt_addr + (i * PAGE_SIZE_4K), zero_page, flags, cache,
-                            PageSize::Size4K, 0, false);
-        }
-
-        curr_map()->load();
-    } else {
-        uintptr_t curr_virt = virt_addr;
-
-        // Then back each page with physical memory via the kernel page map.
-        for (size_t i = 0; i < count; ++i) {
-            if (!curr_map()->map(curr_virt, flags, cache, size)) {
-                // Roll back any mappings we already created.
-                for (size_t j = 0; j < i; ++j) {
-                    uintptr_t addr = virt_addr + (j * step_bytes);
-                    curr_map()->unmap(addr, 0, true);
-                }
-
-                virt_allocator.free_region(virt_addr, total_bytes);
-
-                LOG_ERROR("VMM: failed to map page at 0x%lx (rolling back)", curr_virt);
-                return nullptr;
-            }
-
-            curr_virt += step_bytes;
-        }
-    }
-
-    // LOG_DEBUG("VMM: allocate virt=0x%lx count=%zu size=%u", virt_addr, count,
-    //   static_cast<unsigned>(size));
-    return reinterpret_cast<void*>(virt_addr);
+void* VirtualManager::allocate(size_t count, PageSize size, uint8_t flags, CacheType cache) {
+    size_t total_bytes = page_size_to_bytes(size, count);
+    return vma.allocate(total_bytes, flags, cache);
 }
 
 void VirtualManager::free(void* ptr, size_t count, PageSize size, bool free_phys) {
-    uintptr_t virt_addr = reinterpret_cast<uintptr_t>(ptr);
-    size_t step_bytes   = 0;
-
-    switch (size) {
-        case PageSize::Size4K:
-            step_bytes = PAGE_SIZE_4K;
-            break;
-        case PageSize::Size2M:
-            step_bytes = PAGE_SIZE_2M;
-            break;
-        case PageSize::Size1G:
-            step_bytes = PAGE_SIZE_1G;
-            break;
-    }
-
-    size_t total_bytes = count * step_bytes;
-
-    // Tear down mappings and free backing physical pages.
-    for (size_t i = 0; i < count; ++i) {
-        uintptr_t addr = virt_addr + (i * step_bytes);
-        curr_map()->unmap(addr, 0, free_phys);
-    }
-
-    // Return the virtual range to the allocator for reuse.
-    virt_allocator.free_region(virt_addr, total_bytes);
-
-    // LOG_DEBUG("VMM: free virt=0x%lx count=%zu size=%u", virt_addr, count,
-    //   static_cast<unsigned>(size));
+    vma.free(ptr, free_phys);
 }
 
 void* VirtualManager::reserve_mmio(size_t size, size_t align) {
-    // Reserve a bare virtual range for MMIO; mapping to device physical
-    // addresses is done separately by the caller.
-    uintptr_t addr = virt_allocator.alloc_region(size, align);
-    // LOG_DEBUG("VMM: reserve_mmio size=0x%zx align=0x%zx -> 0x%lx", size, align, addr);
-    return reinterpret_cast<void*>(addr);
+    return vma.reserve(size, align, 0);
 }
 }  // namespace kernel::memory
