@@ -1,3 +1,5 @@
+#include "hal/smp_manager.hpp"
+#include "libs/mutex.hpp"
 #include "memory/heap.hpp"
 #include "memory/memory.hpp"
 #include "memory/vmm.hpp"
@@ -100,30 +102,30 @@ void uacpi_kernel_free(void* ptr) {
 }
 
 uacpi_handle uacpi_kernel_create_mutex() {
-    return reinterpret_cast<uacpi_handle>(new kernel::SpinLock);
+    return reinterpret_cast<uacpi_handle>(new kernel::Mutex);
 }
 
 void uacpi_kernel_free_mutex(uacpi_handle handle) {
-    delete reinterpret_cast<kernel::SpinLock*>(handle);
+    delete reinterpret_cast<kernel::Mutex*>(handle);
 }
 
 uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle handle, uacpi_u16 timeout) {
-    kernel::SpinLock* lock = reinterpret_cast<kernel::SpinLock*>(handle);
-    bool locked            = false;
+    kernel::Mutex* mutex = reinterpret_cast<kernel::Mutex*>(handle);
+    bool locked          = false;
 
     if (timeout == 0xFFFF) {
-        lock->lock();
+        mutex->lock();
         return UACPI_STATUS_OK;
     } else {
-        locked = lock->try_lock();
+        locked = mutex->lock(timeout);
     }
 
     return locked ? UACPI_STATUS_OK : UACPI_STATUS_TIMEOUT;
 }
 
 void uacpi_kernel_release_mutex(uacpi_handle handle) {
-    kernel::SpinLock* lock = reinterpret_cast<kernel::SpinLock*>(handle);
-    lock->unlock();
+    kernel::Mutex* mutex = reinterpret_cast<kernel::Mutex*>(handle);
+    mutex->unlock();
 }
 
 uacpi_handle uacpi_kernel_create_event() {
@@ -158,7 +160,7 @@ void uacpi_kernel_sleep(uacpi_u64 msec) {
 }
 
 uacpi_u64 uacpi_kernel_get_nanoseconds_since_boot() {
-    return 0;
+    return kernel::hal::Timer::get_ticks_ns();
 }
 
 uacpi_status uacpi_kernel_pci_write8(uacpi_handle, uacpi_size, uacpi_u8) {
@@ -190,7 +192,8 @@ uacpi_bool uacpi_kernel_wait_for_event(uacpi_handle, uacpi_u16) {
 }
 
 uacpi_thread_id uacpi_kernel_get_thread_id() {
-    return reinterpret_cast<uacpi_thread_id>(1);
+    kernel::cpu::PerCpuData* cpu = kernel::cpu::CpuCoreManager::get().get_current_core();
+    return reinterpret_cast<uacpi_thread_id>(cpu->curr_thread->tid);
 }
 
 uacpi_status uacpi_kernel_wait_for_work_completion() {
