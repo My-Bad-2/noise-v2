@@ -319,7 +319,7 @@ void VirtualMemoryAllocator::insert_region_locked(uintptr_t start, size_t size, 
     VmRegion* y = nullptr;
     VmRegion* x = this->root;
 
-    while (x != nullptr) {
+    while (x) {
         y = x;
 
         if (z->start < x->start) {
@@ -356,31 +356,12 @@ void VirtualMemoryAllocator::insert_region_locked(uintptr_t start, size_t size, 
     // Distance to Z
     if (pred) {
         pred->gap = z->start - pred->end();
+        this->update_path_to_root(pred);
     }
 
-    this->update_node_metadata(z);
-
-    // We must walk up from `z`. If we have a predessor, we must also walk up
-    // from `pred` if `pred` is not an ancestor of `z`.
-    VmRegion* iterator = z;
-    while (iterator) {
-        this->update_node_metadata(iterator);
-        iterator = iterator->parent;
-    }
-
-    if (pred) {
-        iterator = pred;
-
-        while (iterator) {
-            this->update_node_metadata(iterator);
-            iterator = iterator->parent;
-        }
-    }
-
-    this->cached_cursor = z;
-
-    // Rebalance
+    this->update_path_to_root(z);
     this->insert_fixup(z);
+    this->cached_cursor = z;
 }
 
 void VirtualMemoryAllocator::delete_node_locked(VmRegion* z) {
@@ -403,13 +384,6 @@ void VirtualMemoryAllocator::delete_node_locked(VmRegion* z) {
         while (y->left) {
             y = y->left;
         }
-    }
-
-    original_y_red = y->is_red;
-    if (y->left) {
-        x = y->left;
-    } else {
-        x = y->right;
     }
 
     // Capture y's parent before we move pointers, so we know where
@@ -445,29 +419,20 @@ void VirtualMemoryAllocator::delete_node_locked(VmRegion* z) {
         z->gap = y->gap;
     }
 
+    if (this->cached_cursor == z || this->cached_cursor == y) {
+        this->cached_cursor = pred;
+    }
+
     if (!original_y_red && x) {
         this->delete_fixup(x);
     }
 
-    // We modified the tree structure at y->parent. We must walk up
-    // to root to recalculate `subtree_max_gap`.
-    // If y != z, z is an ancestor of y, so this will also fix z's
-    // metadata too.
-    VmRegion* curr = update_start;
-    while (curr) {
-        this->update_node_metadata(curr);
-        curr = curr->parent;
+    if (update_start) {
+        this->update_path_to_root(update_start);
     }
 
-    // We modified `pred->gap` at the beginning. If `pred` was not an
-    // ancestor of `update_start`, its subtree metadata is now stale.
-    // Just walk up from pred too.
     if (pred) {
-        curr = pred;
-        while (curr) {
-            this->update_node_metadata(curr);
-            curr = curr->parent;
-        }
+        this->update_path_to_root(pred);
     }
 
     this->metadata_allocator.deallocate(y);
@@ -714,5 +679,12 @@ VmRegion* VirtualMemoryAllocator::successor(VmRegion* node) {
     }
 
     return p;
+}
+
+void VirtualMemoryAllocator::update_path_to_root(VmRegion* x) {
+    while (x) {
+        this->update_node_metadata(x);
+        x = x->parent;
+    }
 }
 }  // namespace kernel::memory

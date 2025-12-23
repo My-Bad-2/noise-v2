@@ -1,5 +1,6 @@
 #include "hal/smp_manager.hpp"
 #include "boot/boot.h"
+#include "memory/vma.hpp"
 
 namespace kernel::task {
 Process* Process::kernel_proc         = nullptr;
@@ -41,6 +42,9 @@ Process::Process(memory::PageMap* map) : map(map) {
     size_t cpu_count = mp_request.response->cpu_count;
     this->pcid_cache = new uint16_t[cpu_count];
 
+    this->vma.init(this);
+    memory::UserAddressSpace::arch_init();
+
     // Since this is a kernel process, PCID is 0
     memset(this->pcid_cache, 0, cpu_count * sizeof(uint16_t));
 }
@@ -55,6 +59,8 @@ Process::Process() {
     // Array to store the PICD assigned to this process on each CPU.
     size_t cpu_count = mp_request.response->cpu_count;
     this->pcid_cache = new uint16_t[cpu_count];
+
+    this->vma.init(this);
 
     memset(this->pcid_cache, 0xff, cpu_count * sizeof(uint16_t));
 }

@@ -3,8 +3,11 @@
 #include <atomic>
 #include <cstdint>
 
-#include "task/process.hpp"
 #include "libs/spinlock.hpp"
+
+namespace kernel::task {
+struct Thread;
+}
 
 namespace kernel {
 class Mutex {

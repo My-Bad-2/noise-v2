@@ -4,6 +4,7 @@
 #include "memory/pagemap.hpp"
 #include "libs/spinlock.hpp"
 #include "libs/intrusive_list.hpp"
+#include "memory/vma.hpp"
 
 namespace kernel::cpu {
 struct PerCpuData;
@@ -67,6 +68,7 @@ struct Process : public IntrusiveListNode<ProcessTag> {
 
     IntrusiveList<Process, ProcessTag> children;
     IntrusiveList<Thread, ProcessTag> threads;
+    memory::UserAddressSpace vma;
 
     int exit_code;
 
@@ -81,6 +83,4 @@ struct Process : public IntrusiveListNode<ProcessTag> {
    private:
     static std::atomic<size_t> next_pid;
 };
-
-extern Process* kernel_proc;
 }  // namespace kernel::task

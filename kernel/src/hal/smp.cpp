@@ -1,6 +1,7 @@
 #include "boot/boot.h"
 #include "hal/smp_manager.hpp"
 #include "libs/log.hpp"
+#include "task/process.hpp"
 
 namespace kernel::cpu {
 namespace {
