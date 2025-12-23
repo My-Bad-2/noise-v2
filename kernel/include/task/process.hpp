@@ -6,6 +6,14 @@
 #include "libs/intrusive_list.hpp"
 #include "memory/user_address_space.hpp"
 
+#define PROT_READ  0x01
+#define PROT_WRITE 0x02
+#define PROT_EXEC  0x04
+#define PROT_NONE  0x08
+
+#define MAP_HUGE_2MB 0x01
+#define MAP_HUGE_1GB 0x02
+
 namespace kernel::cpu {
 struct PerCpuData;
 }
@@ -77,6 +85,9 @@ struct Process : public IntrusiveListNode<ProcessTag> {
     Process(memory::PageMap* map);  // Kernel
     Process();                      // User
     ~Process();
+
+    void* mmap(void* addr, size_t len, int prot, int flags);
+    void munmap(void* ptr, size_t len);
 
     static void init();
 

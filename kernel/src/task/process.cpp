@@ -1,6 +1,9 @@
+#include "task/process.hpp"
 #include "hal/smp_manager.hpp"
 #include "boot/boot.h"
+#include "memory/memory.hpp"
 #include "memory/vma.hpp"
+#include "libs/math.hpp"
 
 namespace kernel::task {
 Process* Process::kernel_proc         = nullptr;
@@ -83,6 +86,57 @@ Process::~Process() {
         // mechanism is implemented.
         delete &children.front();
     }
+}
+
+void* Process::mmap(void* addr, size_t len, int prot, int flags) {
+    uint8_t flag = 0;
+
+    if (prot & PROT_READ) {
+        flag |= memory::Read;
+    }
+
+    if (prot & PROT_WRITE) {
+        flag |= memory::Write;
+    }
+
+    if (prot & PROT_EXEC) {
+        flag |= memory::Execute;
+    }
+
+    if (prot & PROT_NONE) {
+        // Do nothing
+    }
+
+    memory::PageSize type = memory::PageSize::Size4K;
+    uintptr_t page_size   = memory::PAGE_SIZE_4K;
+
+    if (flags & MAP_HUGE_2MB) {
+        type      = memory::PageSize::Size2M;
+        page_size = memory::PAGE_SIZE_2M;
+    }
+
+    if (flags & MAP_HUGE_1GB) {
+        type      = memory::PageSize::Size1G;
+        page_size = memory::PAGE_SIZE_1G;
+    }
+
+    size_t aligned_size = align_up(len, page_size);
+    void* ret           = nullptr;
+
+    if (addr) {
+        if (this->vma.allocate_specific(reinterpret_cast<uintptr_t>(addr), aligned_size, flag,
+                                        type)) {
+            ret = addr;
+        }
+    } else {
+        ret = this->vma.allocate(aligned_size, flag, type);
+    }
+
+    return ret;
+}
+
+void Process::munmap(void* ptr, size_t) {
+    return this->vma.free(ptr);
 }
 
 void Process::init() {

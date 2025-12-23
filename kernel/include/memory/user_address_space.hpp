@@ -58,7 +58,8 @@ class UserAddressSpace {
     ~UserAddressSpace();
 
     void* allocate(size_t size, uint8_t flags = Read | Write, PageSize type = PageSize::Size4K);
-    bool allocate_specific(uintptr_t virt_addr, size_t size, uint8_t flags, PageSize type = PageSize::Size4K);
+    bool allocate_specific(uintptr_t virt_addr, size_t size, uint8_t flags,
+                           PageSize type = PageSize::Size4K);
     void free(void* ptr);
     bool handle_page_fault(uintptr_t fault_addr, size_t error_code);
 
