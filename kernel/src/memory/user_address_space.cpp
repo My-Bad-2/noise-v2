@@ -1,12 +1,47 @@
-#include <cstdint>
 #include "memory/memory.hpp"
 #include "memory/pagemap.hpp"
 #include "memory/pcid_manager.hpp"
-#include "memory/vma.hpp"
+#include "memory/user_address_space.hpp"
 #include "libs/math.hpp"
 #include "task/process.hpp"
+#include "memory/pmm.hpp"
 
 namespace kernel::memory {
+UserVmRegion* UserVmRegionAllocator::allocate() {
+    LockGuard guard(this->lock);
+
+    if (!this->free_head) {
+        this->refill();
+    }
+
+    UserVmRegion* node = reinterpret_cast<UserVmRegion*>(this->free_head);
+    this->free_head    = this->free_head->next;
+
+    node->parent = node->left = node->right = nullptr;
+
+    return node;
+}
+
+void UserVmRegionAllocator::deallocate(UserVmRegion* node) {
+    LockGuard guard(this->lock);
+
+    reinterpret_cast<FreeNode*>(node)->next = this->free_head;
+    this->free_head                         = reinterpret_cast<FreeNode*>(node);
+}
+
+void UserVmRegionAllocator::refill() {
+    void* phys          = PhysicalManager::alloc();
+    uintptr_t virt_base = to_higher_half(reinterpret_cast<uintptr_t>(phys));
+
+    size_t count        = PAGE_SIZE_4K / sizeof(UserVmRegion);
+    UserVmRegion* nodes = reinterpret_cast<UserVmRegion*>(virt_base);
+
+    for (size_t i = 0; i < count; ++i) {
+        reinterpret_cast<FreeNode*>(&nodes[i])->next = this->free_head;
+        this->free_head                              = reinterpret_cast<FreeNode*>(&nodes[i]);
+    }
+}
+
 void UserAddressSpace::init(task::Process* proc) {
     this->page_map      = proc->map;
     this->root          = nullptr;
@@ -21,7 +56,7 @@ UserAddressSpace::~UserAddressSpace() {
     this->cached_cursor = nullptr;
 }
 
-void UserAddressSpace::free_tree(VmRegion* node) {
+void UserAddressSpace::free_tree(UserVmRegion* node) {
     if (!node) {
         return;
     }
@@ -31,29 +66,37 @@ void UserAddressSpace::free_tree(VmRegion* node) {
     this->metadata_allocator.deallocate(node);
 }
 
-void* UserAddressSpace::allocate(size_t size, uint8_t flags) {
+void* UserAddressSpace::allocate(size_t size, uint8_t flags, PageSize type) {
     LockGuard guard(this->mutex);
 
     if (size == 0) {
         return nullptr;
     }
 
+    size_t alignment = PAGE_SIZE_4K;
+    if (type == PageSize::Size2M) {
+        alignment = PAGE_SIZE_2M;
+    } else if (type == PageSize::Size1G) {
+        alignment = PAGE_SIZE_1G;
+    }
+
     // Force User Flag
     flags |= User;
 
-    size = align_up(size, PAGE_SIZE_4K);
+    size = align_up(size, alignment);
 
-    uintptr_t virt_addr = this->find_hole(size, PAGE_SIZE_4K);
+    uintptr_t virt_addr = this->find_hole(size, alignment);
 
     if (virt_addr < USER_START || (virt_addr + size) > USER_END) {
         return nullptr;
     }
 
-    this->insert_region(virt_addr, size, flags, CacheType::WriteBack);
+    this->insert_region(virt_addr, size, flags, CacheType::WriteBack, type);
     return reinterpret_cast<void*>(virt_addr);
 }
 
-bool UserAddressSpace::allocate_specific(uintptr_t virt_addr, size_t size, uint8_t flags) {
+bool UserAddressSpace::allocate_specific(uintptr_t virt_addr, size_t size, uint8_t flags,
+                                         PageSize type) {
     LockGuard guard(this->mutex);
 
     if (size == 0) {
@@ -71,7 +114,7 @@ bool UserAddressSpace::allocate_specific(uintptr_t virt_addr, size_t size, uint8
         return false;
     }
 
-    this->insert_region(virt_addr, size, flags | User, CacheType::WriteBack);
+    this->insert_region(virt_addr, size, flags | User, CacheType::WriteBack, type);
     return true;
 }
 
@@ -80,7 +123,7 @@ void UserAddressSpace::free(void* ptr) {
 
     uintptr_t virt_addr = reinterpret_cast<uintptr_t>(ptr);
 
-    VmRegion* node = this->find_region_containing(virt_addr);
+    UserVmRegion* node = this->find_region_containing(virt_addr);
 
     // Only free if we found the exact starting address
     if (node && node->start == virt_addr) {
@@ -110,7 +153,7 @@ uintptr_t UserAddressSpace::find_hole(size_t size, size_t alignment) {
         return found;
     }
 
-    VmRegion* max = this->root;
+    UserVmRegion* max = this->root;
 
     if (!max) {
         return align_up(USER_START, alignment);
@@ -128,7 +171,7 @@ uintptr_t UserAddressSpace::find_hole(size_t size, size_t alignment) {
     return 0;
 }
 
-uintptr_t UserAddressSpace::find_hole(VmRegion* node, size_t size, size_t alignment) {
+uintptr_t UserAddressSpace::find_hole(UserVmRegion* node, size_t size, size_t alignment) {
     if (!node) {
         return 0;
     }
@@ -163,7 +206,7 @@ uintptr_t UserAddressSpace::find_hole(VmRegion* node, size_t size, size_t alignm
     return 0;
 }
 
-void UserAddressSpace::update_node_metadata(VmRegion* x) {
+void UserAddressSpace::update_node_metadata(UserVmRegion* x) {
     if (!x) {
         return;
     }
@@ -184,18 +227,20 @@ void UserAddressSpace::update_node_metadata(VmRegion* x) {
     x->subtree_max_gap = curr_max;
 }
 
-void UserAddressSpace::insert_region(uintptr_t start, size_t size, uint8_t flags, CacheType cache) {
-    VmRegion* z = this->metadata_allocator.allocate();
-    z->start    = start;
-    z->size     = size;
-    z->flags    = flags;
-    z->cache    = cache;
-    z->is_red   = true;
+void UserAddressSpace::insert_region(uintptr_t start, size_t size, uint8_t flags, CacheType cache,
+                                     PageSize type) {
+    UserVmRegion* z = this->metadata_allocator.allocate();
+    z->start        = start;
+    z->size         = size;
+    z->flags        = flags;
+    z->cache        = cache;
+    z->page_size    = type;
+    z->is_red       = true;
     z->left = z->right = nullptr;
     z->parent          = nullptr;
 
-    VmRegion* y = nullptr;
-    VmRegion* x = this->root;
+    UserVmRegion* y = nullptr;
+    UserVmRegion* x = this->root;
 
     while (x != nullptr) {
         y = x;
@@ -220,8 +265,8 @@ void UserAddressSpace::insert_region(uintptr_t start, size_t size, uint8_t flags
     // We need to find the node strictly before Z (predecssor) and
     // strictly after Z (successor) in address order to set the gaps
     // correctly.
-    VmRegion* pred = this->predecessor(z);
-    VmRegion* succ = this->successor(z);
+    UserVmRegion* pred = this->predecessor(z);
+    UserVmRegion* succ = this->successor(z);
 
     if (succ) {
         // Distance to successor
@@ -242,16 +287,16 @@ void UserAddressSpace::insert_region(uintptr_t start, size_t size, uint8_t flags
     this->insert_fixup(z);
 }
 
-void UserAddressSpace::delete_node(VmRegion* z) {
+void UserAddressSpace::delete_node(UserVmRegion* z) {
     // Since we are about to remove the logical range z. We must
     // merge z's gap into its predessor's gap.
     // Now new Gap for Pred = (gap before z) + (z's size) + (gap after z)
-    VmRegion* pred = this->predecessor(z);
+    UserVmRegion* pred = this->predecessor(z);
     if (pred) {
         pred->gap += z->size + z->gap;
     }
 
-    VmRegion *x, *y;
+    UserVmRegion *x, *y;
     bool original_y_red = false;
 
     if (!z->left || !z->right) {
@@ -266,7 +311,7 @@ void UserAddressSpace::delete_node(VmRegion* z) {
 
     // Capture y's parent before we move pointers, so we know where
     // to start updating metadata
-    VmRegion* update_start = y->parent;
+    UserVmRegion* update_start = y->parent;
 
     original_y_red = y->is_red;
     if (y->left) {
@@ -316,15 +361,15 @@ void UserAddressSpace::delete_node(VmRegion* z) {
     this->metadata_allocator.deallocate(y);
 }
 
-void UserAddressSpace::update_path_to_root(VmRegion* x) {
+void UserAddressSpace::update_path_to_root(UserVmRegion* x) {
     while (x) {
         this->update_node_metadata(x);
         x = x->parent;
     }
 }
 
-VmRegion* UserAddressSpace::find_region_containing(uintptr_t addr) {
-    VmRegion* curr = this->root;
+UserVmRegion* UserAddressSpace::find_region_containing(uintptr_t addr) {
+    UserVmRegion* curr = this->root;
 
     while (curr) {
         if (addr >= curr->start && addr < curr->end()) {
@@ -342,8 +387,8 @@ VmRegion* UserAddressSpace::find_region_containing(uintptr_t addr) {
 }
 
 bool UserAddressSpace::check_overlap(uintptr_t start, size_t size) {
-    uintptr_t end  = start + size;
-    VmRegion* curr = this->root;
+    uintptr_t end      = start + size;
+    UserVmRegion* curr = this->root;
 
     while (curr) {
         if (start < curr->end() && end > curr->start) {
@@ -360,7 +405,7 @@ bool UserAddressSpace::check_overlap(uintptr_t start, size_t size) {
     return false;
 }
 
-VmRegion* UserAddressSpace::predecessor(VmRegion* node) {
+UserVmRegion* UserAddressSpace::predecessor(UserVmRegion* node) {
     // If the left subtree is not null, the successor is the
     // rightmost (maximum) node in the left subtree.
     if (node->left) {
@@ -376,7 +421,7 @@ VmRegion* UserAddressSpace::predecessor(VmRegion* node) {
     // If the left subtree is null, the successor is the lowest
     // ancestor for which 'x' is in the right subtree. We walk up
     // the tree until we are no longer a left child.
-    VmRegion* p = node->parent;
+    UserVmRegion* p = node->parent;
     while (p && node == p->left) {
         node = p;
         p    = p->parent;
@@ -385,7 +430,7 @@ VmRegion* UserAddressSpace::predecessor(VmRegion* node) {
     return p;
 }
 
-VmRegion* UserAddressSpace::successor(VmRegion* node) {
+UserVmRegion* UserAddressSpace::successor(UserVmRegion* node) {
     // If the right subtree is not null, the successor is the
     // leftmost (minimum) node in the right subtree.
     if (node->right) {
@@ -401,7 +446,7 @@ VmRegion* UserAddressSpace::successor(VmRegion* node) {
     // If the right subtree is null, the successor is the lowest
     // ancestor for which 'x' is in the left subtree. We walk up
     // the tree until we are no longer a right child.
-    VmRegion* p = node->parent;
+    UserVmRegion* p = node->parent;
     while (p && node == p->right) {
         node = p;
         p    = p->parent;
@@ -410,9 +455,9 @@ VmRegion* UserAddressSpace::successor(VmRegion* node) {
     return p;
 }
 
-void UserAddressSpace::rotate_left(VmRegion* x) {
-    VmRegion* y = x->right;
-    x->right    = y->left;
+void UserAddressSpace::rotate_left(UserVmRegion* x) {
+    UserVmRegion* y = x->right;
+    x->right        = y->left;
 
     if (y->left) {
         y->left->parent = x;
@@ -435,9 +480,9 @@ void UserAddressSpace::rotate_left(VmRegion* x) {
     this->update_node_metadata(y);
 }
 
-void UserAddressSpace::rotate_right(VmRegion* x) {
-    VmRegion* y = x->left;
-    x->left     = y->right;
+void UserAddressSpace::rotate_right(UserVmRegion* x) {
+    UserVmRegion* y = x->left;
+    x->left         = y->right;
 
     if (y->right) {
         y->right->parent = x;
@@ -460,10 +505,10 @@ void UserAddressSpace::rotate_right(VmRegion* x) {
     this->update_node_metadata(y);
 }
 
-void UserAddressSpace::insert_fixup(VmRegion* z) {
+void UserAddressSpace::insert_fixup(UserVmRegion* z) {
     while (z->parent && z->parent->is_red) {
         if (z->parent == z->parent->parent->left) {
-            VmRegion* y = z->parent->parent->right;
+            UserVmRegion* y = z->parent->parent->right;
 
             if (y && y->is_red) {
                 z->parent->is_red         = false;
@@ -481,7 +526,7 @@ void UserAddressSpace::insert_fixup(VmRegion* z) {
                 this->rotate_right(z->parent->parent);
             }
         } else {
-            VmRegion* y = z->parent->parent->left;
+            UserVmRegion* y = z->parent->parent->left;
 
             if (y && y->is_red) {
                 z->parent->is_red         = false;
@@ -504,10 +549,10 @@ void UserAddressSpace::insert_fixup(VmRegion* z) {
     this->root->is_red = false;
 }
 
-void UserAddressSpace::delete_fixup(VmRegion* x) {
+void UserAddressSpace::delete_fixup(UserVmRegion* x) {
     while (x != root && !x->is_red) {
         if (x == x->parent->left) {
-            VmRegion* w = x->parent->right;
+            UserVmRegion* w = x->parent->right;
 
             if (w->is_red) {
                 w->is_red         = false;
@@ -541,7 +586,7 @@ void UserAddressSpace::delete_fixup(VmRegion* x) {
                 x = root;
             }
         } else {
-            VmRegion* w = x->parent->left;
+            UserVmRegion* w = x->parent->left;
 
             if (w->is_red) {
                 w->is_red         = false;

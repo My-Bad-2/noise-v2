@@ -4,7 +4,7 @@
 #include "memory/pagemap.hpp"
 #include "libs/spinlock.hpp"
 #include "libs/intrusive_list.hpp"
-#include "memory/vma.hpp"
+#include "memory/user_address_space.hpp"
 
 namespace kernel::cpu {
 struct PerCpuData;

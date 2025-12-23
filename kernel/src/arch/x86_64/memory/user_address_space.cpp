@@ -2,6 +2,7 @@
 #include "hal/interrupt.hpp"
 #include "hal/smp_manager.hpp"
 #include "libs/log.hpp"
+#include "memory/memory.hpp"
 #include "memory/vma.hpp"
 #include "hal//interface/interrupt.hpp"
 
@@ -38,7 +39,7 @@ class PageFaultHandler : public cpu::IInterruptHandler {
 bool UserAddressSpace::handle_page_fault(uintptr_t fault_addr, size_t error_code) {
     LockGuard guard(this->mutex);
 
-    VmRegion* region = this->find_region_containing(fault_addr);
+    UserVmRegion* region = this->find_region_containing(fault_addr);
 
     LOG_DEBUG("PF Handler Called!");
 
@@ -56,13 +57,21 @@ bool UserAddressSpace::handle_page_fault(uintptr_t fault_addr, size_t error_code
         return false;
     }
 
-    uintptr_t page_base = fault_addr & ~(PAGE_SIZE_4K - 1);
+    size_t alignment = PAGE_SIZE_4K;
+
+    if (region->page_size == PageSize::Size1G) {
+        alignment = PAGE_SIZE_1G;
+    } else if (region->page_size == PageSize::Size2M) {
+        alignment = PAGE_SIZE_2M;
+    }
+
+    uintptr_t page_base = fault_addr & ~(alignment - 1);
 
     if (this->page_map->translate(page_base) != 0) {
         return true;
     }
 
-    if (!this->page_map->map(page_base, region->flags, region->cache, PageSize::Size4K)) {
+    if (!this->page_map->map(page_base, region->flags, region->cache, region->page_size)) {
         LOG_ERROR("Out of memory!");
         return false;
     }
