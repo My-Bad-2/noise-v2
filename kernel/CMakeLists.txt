@@ -4,7 +4,7 @@ set(
     "-fno-pie"
 )
 
-set(KERNEL_LINK_SCRIPT ${CMAKE_SOURCE_DIR}/misc/linker/${${PROJECT_NAME}_ARCHITECTURE}.ld)
+set(KERNEL_LINK_SCRIPT ${CMAKE_SOURCE_DIR}/misc/linker/${${PROJECT_NAME}_ARCHITECTURE}-kernel.ld)
 set(
     KERNEL_INCLUDE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/include"

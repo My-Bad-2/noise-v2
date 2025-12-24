@@ -69,6 +69,7 @@ include(${uacpi_SOURCE_DIR}/uacpi.cmake)
 # add_subdirectory(klibc)
 add_subdirectory(kernel)
 add_subdirectory(misc/limine)
+add_subdirectory(userland)
 
 # project_enable_doxygen("awesome-sidebar")
 
@@ -89,7 +90,7 @@ add_qemu_targets(
 set(
     SOURCE_DIRECTORIES
     "${CMAKE_SOURCE_DIR}/kernel"
-    "${CMAKE_SOURCE_DIR}/klibc"
+    "${CMAKE_SOURCE_DIR}/userland"
 )
 
 add_clang_format_target(

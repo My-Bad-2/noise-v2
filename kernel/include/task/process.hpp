@@ -91,6 +91,7 @@ struct Process : public IntrusiveListNode<ProcessTag> {
     int mprotect(void* addr, size_t len, int prot);
 
     static void init();
+    static Process* load_elf(void* elf_data);
 
    private:
     static std::atomic<size_t> next_pid;
