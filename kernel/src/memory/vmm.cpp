@@ -3,7 +3,10 @@
 #include "libs/elf.h"
 #include "libs/math.hpp"
 #include "memory/vmm.hpp"
+#include "memory/pagemap.hpp"
+#include "memory/pcid_manager.hpp"
 #include "memory/vma.hpp"
+#include "task/process.hpp"
 
 namespace kernel::memory {
 namespace {
@@ -204,5 +207,29 @@ void VirtualManager::free(void* ptr, bool free_phys) {
 
 void* VirtualManager::reserve_mmio(size_t size, size_t align) {
     return vma.reserve(size, align, 0);
+}
+
+ScopedAddressSpaceSwitch::ScopedAddressSpaceSwitch(task::Process* proc) {
+    cpu::CpuCoreManager& manager = cpu::CpuCoreManager::get();
+    cpu::PerCpuData* cpu         = manager.get_current_core();
+
+    task::Process* curr = cpu->curr_thread->owner;
+    this->old_map       = curr->map;
+    this->old_pcid      = cpu->pcid_manager->get_pcid(curr);
+
+    PageMap* new_map = proc->map;
+    uint16_t pcid    = cpu->pcid_manager->get_pcid(proc);
+
+    if (this->old_map != new_map) {
+        new_map->load(pcid);
+    }
+}
+
+ScopedAddressSpaceSwitch::~ScopedAddressSpaceSwitch() {
+    PageMap* curr_map = VirtualManager::curr_map();
+
+    if (curr_map != old_map) {
+        old_map->load(this->old_pcid);
+    }
 }
 }  // namespace kernel::memory

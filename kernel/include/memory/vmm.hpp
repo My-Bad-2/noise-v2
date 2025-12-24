@@ -4,6 +4,10 @@
 #include <cstddef>
 #include "memory/pagemap.hpp"
 
+namespace kernel::task {
+struct Process;
+}
+
 namespace kernel::memory {
 class VirtualManager {
    public:
@@ -25,5 +29,13 @@ class VirtualManager {
     static void map_kernel();
 
     static size_t page_size_to_bytes(PageSize size, size_t count);
+};
+
+struct ScopedAddressSpaceSwitch {
+    PageMap* old_map;
+    uint16_t old_pcid;
+
+    ScopedAddressSpaceSwitch(task::Process* proc);
+    ~ScopedAddressSpaceSwitch();
 };
 }  // namespace kernel::memory

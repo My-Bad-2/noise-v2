@@ -2,9 +2,7 @@
 #include "arch.hpp"
 #include "cpu/exception.hpp"
 #include "cpu/regs.h"
-#include "hal/smp_manager.hpp"
-#include "memory/pagemap.hpp"
-#include "memory/pcid_manager.hpp"
+#include "memory/vmm.hpp"
 #include "task/scheduler.hpp"
 #include <string.h>
 #include <new>
@@ -88,37 +86,28 @@ void Thread::arch_init(uintptr_t entry, uintptr_t arg) {
         bool int_status = arch::interrupt_status();
         arch::disable_interrupts();
 
-        // Scheduler::add_thread() assigns the cpu to the thread, here we have no idea which CPU
-        // this thread would run on.
-        cpu::PerCpuData* curr_cpu = cpu::CpuCoreManager::get().get_current_core();
-        Process* old_proc         = curr_cpu->curr_thread->owner;
-        uint16_t old_pcid         = memory::PcidManager::get().get_pcid(old_proc);
-        memory::PageMap* old_map  = old_proc->map;
+        {
+            // Switch to Process's address space
+            memory::ScopedAddressSpaceSwitch(this->owner);
 
-        // It Ideally shouldn't fail
-        uint16_t pcid = memory::PcidManager::get().get_pcid(this->owner);
-        this->owner->map->load(pcid);
+            auto* layout = reinterpret_cast<UserStackLayout*>(stack_top - sizeof(UserStackLayout));
+            memset(layout, 0, sizeof(UserStackLayout));
 
-        auto* layout = reinterpret_cast<UserStackLayout*>(stack_top - sizeof(UserStackLayout));
-        memset(layout, 0, sizeof(UserStackLayout));
+            layout->trap_frame.cs     = 0x23;  // User Code | RPL 3
+            layout->trap_frame.ss     = 0x1B;  // User Data | RPL 3
+            layout->trap_frame.rflags = FLAGS_IF | FLAGS_RESERVED_ONES;
+            layout->trap_frame.rip    = entry;  // User Entry Point
+            layout->trap_frame.rdi    = arg;    // User Stack Pointer
 
-        layout->trap_frame.cs     = 0x23;  // User Code | RPL 3
-        layout->trap_frame.ss     = 0x1B;  // User Data | RPL 3
-        layout->trap_frame.rflags = FLAGS_IF | FLAGS_RESERVED_ONES;
-        layout->trap_frame.rip    = entry;  // User Entry Point
-        layout->trap_frame.rdi    = arg;    // User Stack Pointer
+            // Safety return address (if IRET fails somehow)
+            layout->thread_exit_addr = reinterpret_cast<uintptr_t>(thread_exit);
 
-        // Safety return address (if IRET fails somehow)
-        layout->thread_exit_addr = reinterpret_cast<uintptr_t>(thread_exit);
+            // TrapFrame internal RSP points to safety exit
+            layout->trap_frame.rsp = reinterpret_cast<uintptr_t>(&layout->thread_exit_addr);
+            layout->switch_ctx.return_address = reinterpret_cast<uintptr_t>(trap_return);
 
-        // TrapFrame internal RSP points to safety exit
-        layout->trap_frame.rsp            = reinterpret_cast<uintptr_t>(&layout->thread_exit_addr);
-        layout->switch_ctx.return_address = reinterpret_cast<uintptr_t>(trap_return);
-
-        this->kernel_stack_ptr = reinterpret_cast<uintptr_t>(&layout->switch_ctx);
-
-        // Return back to the previous address space
-        old_map->load(old_pcid);
+            this->kernel_stack_ptr = reinterpret_cast<uintptr_t>(&layout->switch_ctx);
+        }
 
         if (int_status) {
             arch::enable_interrupts();
