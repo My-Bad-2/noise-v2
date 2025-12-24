@@ -17,6 +17,9 @@ constexpr uint16_t TIME_SLICE_QUANTA[64] = {
 }  // namespace
 
 void Scheduler::add_thread(Thread* t) {
+    cpu::CpuCoreManager& cpu_manager = cpu::CpuCoreManager::get();
+    cpu::PerCpuData* cpu             = cpu_manager.get_core_by_index(this->cpu_id);
+
     if (t->priority >= MLFQ_LEVELS) {
         t->priority = MLFQ_LEVELS - 1;
     }
@@ -25,9 +28,8 @@ void Scheduler::add_thread(Thread* t) {
         t->quantum = TIME_SLICE_QUANTA[t->priority];
     }
 
-    t->state             = Ready;
-    cpu::PerCpuData* cpu = cpu::CpuCoreManager::get().get_core_by_index(this->cpu_id);
-    t->cpu               = cpu;
+    t->state = Ready;
+    t->cpu   = cpu;
 
     {
         LockGuard guard(this->lock);
@@ -45,8 +47,8 @@ void Scheduler::add_thread(Thread* t) {
         cpu->reschedule_needed = true;
 
         // If this is running on a different core, send an IPI to wake it up
-        if (cpu::CpuCoreManager::get().get_current_core()->core_idx != this->cpu_id) {
-            cpu::CpuCoreManager::get().send_ipi(this->cpu_id, IPI_RESCHEDULE_VECTOR);
+        if (cpu_manager.get_current_core()->core_idx != this->cpu_id) {
+            cpu_manager.send_ipi(this->cpu_id, IPI_RESCHEDULE_VECTOR);
         }
     }
 }
@@ -77,8 +79,9 @@ Thread* Scheduler::get_next_thread() {
 }
 
 Thread* Scheduler::try_steal() {
+    cpu::CpuCoreManager& cpu_manager = cpu::CpuCoreManager::get();
     // Iterate over all other CPUs
-    size_t max_cpus = cpu::CpuCoreManager::get().get_total_cores();
+    size_t max_cpus = cpu_manager.get_total_cores();
 
     for (size_t i = 0; i < max_cpus; ++i) {
         size_t victim_id = (this->cpu_id + i) % max_cpus;
@@ -89,7 +92,7 @@ Thread* Scheduler::try_steal() {
         }
 
         cpu::PerCpuData* victim_cpu =
-            cpu::CpuCoreManager::get().get_core_by_index(static_cast<uint32_t>(victim_id));
+            cpu_manager.get_core_by_index(static_cast<uint32_t>(victim_id));
         Scheduler& victim_sched = victim_cpu->sched;
 
         // Use `try_lock()` to avoid deadlock
@@ -119,7 +122,7 @@ Thread* Scheduler::try_steal() {
 
             if (stolen) {
                 // Migrate the thread to this cpu
-                stolen->cpu = cpu::CpuCoreManager::get().get_core_by_index(this->cpu_id);
+                stolen->cpu = cpu_manager.get_core_by_index(this->cpu_id);
                 return stolen;
             }
         }

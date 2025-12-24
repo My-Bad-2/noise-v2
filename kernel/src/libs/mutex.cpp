@@ -11,7 +11,7 @@ void Mutex::timeout_callback(void* data) {
 
     ctx->timed_out.store(true, std::memory_order_release);
 
-    task::Scheduler& sched = cpu::CpuCoreManager::get().get_current_core()->sched;
+    task::Scheduler& sched = task::Scheduler::get();
     sched.unblock(ctx->thread);
 }
 
@@ -130,9 +130,8 @@ void Mutex::wakeup_next() {
     LockGuard guard(this->queue_lock);
 
     if (this->wait_head) {
-        task::Thread* t      = this->wait_head->thread;
-        cpu::PerCpuData* cpu = cpu::CpuCoreManager::get().get_current_core();
-        cpu->sched.unblock(t);
+        task::Thread* t = this->wait_head->thread;
+        task::Scheduler::get().unblock(t);
 
         WaitNode* old   = this->wait_head;
         this->wait_head = this->wait_head->next;

@@ -2,6 +2,7 @@
 #include "memory/pagemap.hpp"
 #include "memory/memory.hpp"
 #include "memory/paging.hpp"
+#include <cstdint>
 #include "memory/pcid_manager.hpp"
 #include "memory/pmm.hpp"
 #include "cpu/registers.hpp"
@@ -517,6 +518,67 @@ uintptr_t PageMap::translate(uintptr_t virt_addr) {
             uint64_t phys_base = entry & page_mask;
 
             return phys_base + offset;
+        }
+
+        curr_table_phys = entry & page_mask;
+    }
+
+    return 0;
+}
+
+size_t PageMap::set_page_flags(uintptr_t virt_addr, uint8_t flags, CacheType cache,
+                               uint16_t owner_pcid) {
+    uintptr_t curr_table_phys = this->phys_root_addr;
+    size_t new_flags          = convert_generic_flags(flags, cache, PageSize::Size4K);
+
+    for (int level = max_levels; level >= 1; --level) {
+        uintptr_t* table_virt = reinterpret_cast<uintptr_t*>(to_higher_half(curr_table_phys));
+
+        int shift = 12 + (level - 1) * 9;
+        int index = static_cast<int>((virt_addr >> shift) & 0x1FF);
+
+        uint64_t entry = table_virt[index];
+
+        if (!(entry & FlagPresent)) {
+            return false;
+        }
+
+        bool is_huge = (level > 1) && (entry & FlagHuge);
+        bool is_leaf = (level == 1);
+
+        if (is_huge || is_leaf) {
+            uintptr_t phys_base = entry & page_mask;
+            uint64_t new_entry  = phys_base | new_flags;
+
+            if (is_huge) {
+                new_entry |= FlagHuge;
+
+                // convert_generic_flags() doesn't handles Large PAT here.
+                // So, we do it manually.
+                switch (cache) {
+                    case CacheType::WriteProtected:
+                        new_entry |= FlagLPAT;
+                        break;
+                    case CacheType::WriteCombining:
+                        new_entry |= FlagLPAT;
+                        break;
+                    case CacheType::WriteBack:
+                    case CacheType::WriteThrough:
+                    case CacheType::Uncached:
+                    default:
+                        break;
+                }
+            }
+
+            table_virt[index] = new_entry;
+
+            if (this->is_active()) {
+                TLB::flush(virt_addr);
+            } else {
+                TLB::flush_specific(virt_addr, owner_pcid);
+            }
+
+            return 1ul << shift;
         }
 
         curr_table_phys = entry & page_mask;

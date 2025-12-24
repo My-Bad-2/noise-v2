@@ -56,7 +56,7 @@ struct Thread : public IntrusiveListNode<SchedulerTag>,
 
     Thread() = default;
     Thread(Process* parent, void (*callback)(void*), void* args);
-    ~Thread() {}
+    ~Thread();
 
    private:
     void arch_init(uintptr_t entry, uintptr_t arg);
@@ -88,6 +88,7 @@ struct Process : public IntrusiveListNode<ProcessTag> {
 
     void* mmap(void* addr, size_t len, int prot, int flags);
     void munmap(void* ptr, size_t len);
+    int mprotect(void* addr, size_t len, int prot);
 
     static void init();
 

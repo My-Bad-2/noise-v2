@@ -36,6 +36,16 @@ Thread::Thread(Process* proc, void (*callback)(void*), void* args) {
     this->arch_init(reinterpret_cast<uintptr_t>(callback), reinterpret_cast<uintptr_t>(args));
 }
 
+Thread::~Thread() {
+    if (this->is_user_thread) {
+        this->owner->munmap(this->kernel_stack, USTACK_SIZE);
+    } else {
+        delete this->kernel_stack;
+    }
+
+    delete this->fpu_storage;
+}
+
 Process::Process(memory::PageMap* map) : map(map) {
     this->pid = next_pid.fetch_add(1, std::memory_order_relaxed);
     this->next_tid.store(1, std::memory_order_relaxed);
@@ -144,5 +154,44 @@ void Process::munmap(void* ptr, size_t) {
 
 void Process::init() {
     kernel_proc = new Process(memory::PageMap::get_kernel_map());
+}
+
+int Process::mprotect(void* addr, size_t len, int prot) {
+    uintptr_t virt_start = reinterpret_cast<uintptr_t>(addr);
+
+    if (virt_start & (memory::PAGE_SIZE_4K - 1)) {
+        return -1;
+    }
+
+    uint8_t flags           = memory::Read | memory::User;
+    memory::CacheType cache = memory::CacheType::WriteBack;
+
+    // Align length to 4KiB
+    size_t aligned_len = align_up(len, memory::PAGE_SIZE_4K);
+
+    if (prot & PROT_WRITE) {
+        flags |= memory::Write;
+    }
+
+    if (prot & PROT_EXEC) {
+        flags |= memory::Execute;
+    }
+
+    uintptr_t curr_virt  = virt_start;
+    uintptr_t virt_end   = virt_start + aligned_len;
+    uint16_t active_pcid = memory::PcidManager::get().get_pcid(this);
+
+    // TODO: Implement shatter page in PageMap
+    while (curr_virt < virt_end) {
+        size_t chunk_size = this->map->set_page_flags(curr_virt, flags, cache, active_pcid);
+
+        if (chunk_size == 0) {
+            return -1;
+        }
+
+        curr_virt += chunk_size;
+    }
+
+    return 0;
 }
 }  // namespace kernel::task

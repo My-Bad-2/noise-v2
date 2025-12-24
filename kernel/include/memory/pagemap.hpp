@@ -38,6 +38,8 @@ class PageMap {
 
     void unmap(uintptr_t virt_addr, uint16_t owner_pcid = 0, bool free_phys = false);
     uintptr_t translate(uintptr_t virt_addr);
+    size_t set_page_flags(uintptr_t virt_addr, uint8_t flags,
+                          CacheType cache = CacheType::WriteBack, uint16_t owner_pcid = 0);
 
     void load(uint16_t pcid = 0, bool flush = true);
 
