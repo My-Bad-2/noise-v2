@@ -25,8 +25,9 @@ void Scheduler::add_thread(Thread* t) {
         t->quantum = TIME_SLICE_QUANTA[t->priority];
     }
 
-    t->state                  = Ready;
-    cpu::PerCpuData* cpu_data = cpu::CpuCoreManager::get().get_core_by_index(this->cpu_id);
+    t->state             = Ready;
+    cpu::PerCpuData* cpu = cpu::CpuCoreManager::get().get_core_by_index(this->cpu_id);
+    t->cpu               = cpu;
 
     {
         LockGuard guard(this->lock);
@@ -40,8 +41,8 @@ void Scheduler::add_thread(Thread* t) {
         this->active_queues_bitmap |= (1 << t->priority);
     }
 
-    if (t->priority < cpu_data->curr_thread->priority) {
-        cpu_data->reschedule_needed = true;
+    if (t->priority < cpu->curr_thread->priority) {
+        cpu->reschedule_needed = true;
 
         // If this is running on a different core, send an IPI to wake it up
         if (cpu::CpuCoreManager::get().get_current_core()->core_idx != this->cpu_id) {

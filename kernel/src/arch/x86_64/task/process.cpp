@@ -1,6 +1,10 @@
 #include "task/process.hpp"
+#include "arch.hpp"
 #include "cpu/exception.hpp"
 #include "cpu/regs.h"
+#include "hal/smp_manager.hpp"
+#include "memory/pagemap.hpp"
+#include "memory/pcid_manager.hpp"
 #include "task/scheduler.hpp"
 #include <string.h>
 #include <new>
@@ -54,9 +58,19 @@ void Thread::arch_init(uintptr_t entry, uintptr_t arg) {
         SIMD::save(clean_fpu_state);
     }
 
+    // FPU save/restore are handled by the kernel before it returns back to RING 3, so just use the
+    // kernel's address space.
+    this->fpu_storage = new (fpu_alignment) std::byte[fpu_state_size];
+    size_t stack_size = this->is_user_thread ? USTACK_SIZE : KSTACK_SIZE;
+
     // Allocate the kernel stack and set up the initial context.
-    this->kernel_stack = new std::byte[KSTACK_SIZE];
-    this->fpu_storage  = new (fpu_alignment) std::byte[fpu_state_size];
+    if (this->is_user_thread) {
+        // A page must either be writable or executable but never both (Write^Execute)
+        void* stack = this->owner->mmap(nullptr, stack_size, PROT_READ | PROT_WRITE, MAP_POPULATE);
+        this->kernel_stack = reinterpret_cast<std::byte*>(stack);
+    } else {
+        this->kernel_stack = new std::byte[stack_size];
+    }
 
     if (!this->fpu_storage || !this->kernel_stack) {
         PANIC("Cannot Allocate Thread resources");
@@ -64,9 +78,27 @@ void Thread::arch_init(uintptr_t entry, uintptr_t arg) {
 
     memcpy(this->fpu_storage, clean_fpu_state, fpu_state_size);
 
-    uintptr_t stack_top = reinterpret_cast<uintptr_t>(this->kernel_stack) + KSTACK_SIZE;
+    uintptr_t stack_top = reinterpret_cast<uintptr_t>(this->kernel_stack) + stack_size;
 
     if (this->is_user_thread) {
+        // Since we aren't in the kernel process anymore, we must ensure that the user process's
+        // pagemap is loaded into the CPU before we can proceed to setup the user stack. For that
+        // disable interrupts, and store the previous pagemap before switching to the target
+        // process's pagemap.
+        bool int_status = arch::interrupt_status();
+        arch::disable_interrupts();
+
+        // Scheduler::add_thread() assigns the cpu to the thread, here we have no idea which CPU
+        // this thread would run on.
+        cpu::PerCpuData* curr_cpu = cpu::CpuCoreManager::get().get_current_core();
+        Process* old_proc         = curr_cpu->curr_thread->owner;
+        uint16_t old_pcid         = memory::PcidManager::get().get_pcid(old_proc);
+        memory::PageMap* old_map  = old_proc->map;
+
+        // It Ideally shouldn't fail
+        uint16_t pcid = memory::PcidManager::get().get_pcid(this->owner);
+        this->owner->map->load(pcid);
+
         auto* layout = reinterpret_cast<UserStackLayout*>(stack_top - sizeof(UserStackLayout));
         memset(layout, 0, sizeof(UserStackLayout));
 
@@ -84,6 +116,13 @@ void Thread::arch_init(uintptr_t entry, uintptr_t arg) {
         layout->switch_ctx.return_address = reinterpret_cast<uintptr_t>(trap_return);
 
         this->kernel_stack_ptr = reinterpret_cast<uintptr_t>(&layout->switch_ctx);
+
+        // Return back to the previous address space
+        old_map->load(old_pcid);
+
+        if (int_status) {
+            arch::enable_interrupts();
+        }
     } else {
         auto* layout = reinterpret_cast<KernelStackLayout*>(stack_top - sizeof(KernelStackLayout));
         memset(layout, 0, sizeof(KernelStackLayout));

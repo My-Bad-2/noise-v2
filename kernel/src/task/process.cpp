@@ -1,32 +1,31 @@
 #include "task/process.hpp"
-#include "hal/smp_manager.hpp"
 #include "boot/boot.h"
 #include "memory/memory.hpp"
+#include "memory/pagemap.hpp"
 #include "memory/vma.hpp"
 #include "libs/math.hpp"
+#include "libs/log.hpp"
+#include "memory/pcid_manager.hpp"
+#include <string.h>
 
 namespace kernel::task {
 Process* Process::kernel_proc         = nullptr;
 std::atomic<size_t> Process::next_pid = 0;
 
-Thread::Thread(Process* proc, void (*callback)(void*), void* args, void* ptr, bool is_user) {
+Thread::Thread(Process* proc, void (*callback)(void*), void* args) {
     if (proc == nullptr) {
         PANIC("Task: Thread's parent process not present!");
     }
 
-    this->owner          = proc;
-    this->priority       = 0;
-    this->state          = Ready;
-    this->is_user_thread = is_user;
+    this->owner    = proc;
+    this->priority = 0;
+    this->state    = Ready;
+
+    // Only Kernel Process (PID 0) is permitted to create kernel threads
+    this->is_user_thread = (proc->pid != 0);
 
     this->last_run_timestamp   = 0;
     this->wait_start_timestamp = 0;
-
-    if (!ptr) {
-        this->cpu = cpu::CpuCoreManager::get().get_current_core();
-    } else {
-        this->cpu = reinterpret_cast<cpu::PerCpuData*>(ptr);
-    }
 
     {
         LockGuard guard(proc->lock);
@@ -89,7 +88,7 @@ Process::~Process() {
 }
 
 void* Process::mmap(void* addr, size_t len, int prot, int flags) {
-    uint8_t flag = 0;
+    uint8_t flag = memory::Lazy;
 
     if (prot & PROT_READ) {
         flag |= memory::Read;
@@ -118,6 +117,10 @@ void* Process::mmap(void* addr, size_t len, int prot, int flags) {
     if (flags & MAP_HUGE_1GB) {
         type      = memory::PageSize::Size1G;
         page_size = memory::PAGE_SIZE_1G;
+    }
+
+    if (flags & MAP_POPULATE) {
+        flags &= ~memory::Lazy;
     }
 
     size_t aligned_size = align_up(len, page_size);

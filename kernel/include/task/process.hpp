@@ -13,6 +13,7 @@
 
 #define MAP_HUGE_2MB 0x01
 #define MAP_HUGE_1GB 0x02
+#define MAP_POPULATE 0x04
 
 namespace kernel::cpu {
 struct PerCpuData;
@@ -54,8 +55,7 @@ struct Thread : public IntrusiveListNode<SchedulerTag>,
     bool is_user_thread;
 
     Thread() = default;
-    Thread(Process* parent, void (*callback)(void*), void* args, void* curr_cpu = nullptr,
-           bool is_user = false);
+    Thread(Process* parent, void (*callback)(void*), void* args);
     ~Thread() {}
 
    private:

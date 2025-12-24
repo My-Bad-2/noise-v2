@@ -92,6 +92,19 @@ void* UserAddressSpace::allocate(size_t size, uint8_t flags, PageSize type) {
     }
 
     this->insert_region(virt_addr, size, flags, CacheType::WriteBack, type);
+
+    if (!(flags & Lazy)) {
+        if (!this->populate(virt_addr, size, flags, CacheType::WriteBack)) {
+            UserVmRegion* node = this->find_region_containing(virt_addr);
+
+            if (node) {
+                this->delete_node(node);
+            }
+
+            return nullptr;
+        }
+    }
+
     return reinterpret_cast<void*>(virt_addr);
 }
 
@@ -103,8 +116,17 @@ bool UserAddressSpace::allocate_specific(uintptr_t virt_addr, size_t size, uint8
         return false;
     }
 
-    size      = align_up(size, PAGE_SIZE_4K);
-    virt_addr = align_down(virt_addr, PAGE_SIZE_4K);
+    size_t alignment = PAGE_SIZE_4K;
+    if (type == PageSize::Size2M) {
+        alignment = PAGE_SIZE_2M;
+    } else if (type == PageSize::Size1G) {
+        alignment = PAGE_SIZE_1G;
+    }
+
+    size      = align_up(size, alignment);
+    virt_addr = align_down(virt_addr, alignment);
+
+    flags |= User;
 
     if (virt_addr < USER_START || (virt_addr + size) > USER_END) {
         return false;
@@ -114,7 +136,20 @@ bool UserAddressSpace::allocate_specific(uintptr_t virt_addr, size_t size, uint8
         return false;
     }
 
-    this->insert_region(virt_addr, size, flags | User, CacheType::WriteBack, type);
+    this->insert_region(virt_addr, size, flags, CacheType::WriteBack, type);
+
+    if (!(flags & Lazy)) {
+        if (!this->populate(virt_addr, size, flags, CacheType::WriteBack)) {
+            UserVmRegion* node = this->find_region_containing(virt_addr);
+
+            if (node) {
+                this->delete_node(node);
+            }
+
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -625,5 +660,38 @@ void UserAddressSpace::delete_fixup(UserVmRegion* x) {
     if (x) {
         x->is_red = false;
     }
+}
+
+bool UserAddressSpace::populate(uintptr_t start, size_t size, uint8_t flags, CacheType cache) {
+    uintptr_t curr = start;
+    uintptr_t end  = start + size;
+
+    while (curr < end) {
+        size_t remaining = end - curr;
+
+        if (!this->page_map->translate(curr)) {
+            if ((remaining >= PAGE_SIZE_1G) && (curr % PAGE_SIZE_1G == 0)) {
+                if (!this->page_map->map(curr, flags, cache, PageSize::Size1G)) {
+                    return false;
+                }
+
+                curr += PAGE_SIZE_1G;
+            } else if ((remaining >= PAGE_SIZE_2M) && (curr % PAGE_SIZE_2M == 0)) {
+                if (!this->page_map->map(curr, flags, cache, PageSize::Size2M)) {
+                    return false;
+                }
+
+                curr += PAGE_SIZE_2M;
+            } else {
+                if (!this->page_map->map(curr, flags, cache, PageSize::Size4K)) {
+                    return false;
+                }
+
+                curr += PAGE_SIZE_4K;
+            }
+        }
+    }
+
+    return true;
 }
 }  // namespace kernel::memory

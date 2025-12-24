@@ -67,6 +67,8 @@ class UserAddressSpace {
     uintptr_t find_hole(size_t size, size_t alignment);
     uintptr_t find_hole(UserVmRegion* node, size_t size, size_t alignment);
 
+    bool populate(uintptr_t start, size_t size, uint8_t flags, CacheType cache);
+
     UserVmRegion* find_region_containing(uintptr_t addr);
     bool check_overlap(uintptr_t start, size_t size);
 

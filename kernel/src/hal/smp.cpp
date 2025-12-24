@@ -37,7 +37,7 @@ void PerCpuData::init(void* stack_top) {
     this->sched.init(this->core_idx);
 
     this->idle_thread = this->curr_thread =
-        new task::Thread(task::Process::kernel_proc, idle_worker, nullptr, this);
+        new task::Thread(task::Process::kernel_proc, idle_worker, nullptr);
 
     this->reaper_thread = new task::Thread(
         task::Process::kernel_proc,
@@ -49,7 +49,7 @@ void PerCpuData::init(void* stack_top) {
                 sched->reap_zombies();
             }
         },
-        &this->sched, this);
+        &this->sched);
 
     this->sched.add_thread(this->idle_thread);
     this->sched.add_thread(this->reaper_thread);
@@ -101,8 +101,8 @@ void CpuCoreManager::init(void* bsp_stack_top) {
     this->smp_active = true;
 
     // Uncomment these while testing any changes in scheduler
-    // auto t1 = new task::Thread(task::Process::kernel_proc, worker, (void*)"A", cores[0]);
-    // auto t2 = new task::Thread(task::Process::kernel_proc, worker, (void*)"B", cores[0]);
+    // auto t1 = new task::Thread(task::Process::kernel_proc, worker, (void*)"A");
+    // auto t2 = new task::Thread(task::Process::kernel_proc, worker, (void*)"B");
 
     // cores[0]->sched.add_thread(t1);
     // cores[0]->sched.add_thread(t2);

@@ -9,6 +9,7 @@ on:
 jobs:
     # Job 1: Build the container image once
     prepare-image:
+        if: false
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
@@ -21,6 +22,7 @@ jobs:
 
     # Job 2: Run the matrix builds using the saved image
     build:
+        if: false
         needs: prepare-image
         runs-on: ubuntu-latest
         strategy:

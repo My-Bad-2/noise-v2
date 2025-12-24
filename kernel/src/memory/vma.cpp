@@ -177,10 +177,10 @@ void VirtualMemoryAllocator::map(uintptr_t virt_addr, size_t size, uint8_t flags
         size_t remaining = end - curr;
 
         if ((remaining >= PAGE_SIZE_1G) && (curr % PAGE_SIZE_1G == 0)) {
-            kmap->map(virt_addr, flags, cache, PageSize::Size1G);
+            kmap->map(curr, flags, cache, PageSize::Size1G);
             curr += PAGE_SIZE_1G;
         } else if ((remaining >= PAGE_SIZE_2M) && (curr % PAGE_SIZE_2M == 0)) {
-            kmap->map(virt_addr, flags, cache, PageSize::Size2M);
+            kmap->map(curr, flags, cache, PageSize::Size2M);
             curr += PAGE_SIZE_2M;
         } else {
             kmap->map(curr, flags, cache, PageSize::Size4K);
